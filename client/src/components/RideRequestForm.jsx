@@ -7,13 +7,12 @@ const OUTSTATION_NODES = ["Main Gate", "KGP Railway Station", "Hijli Railway Sta
 const RideRequestForm = ({ currentUser, refreshData }) => {
   const [direction, setDirection] = useState('leaving'); 
   const [formData, setFormData] = useState({
-    originNode: HALL_NODES[4], // better to keep home hall 
+    originNode: HALL_NODES[4], 
     destinationNode: OUTSTATION_NODES[1], 
     targetDepartureTime: '',
     flexibilityMinutes: 20,
     luggageSize: 'none',
     vehiclePreference: 'ANY',
-    gender: 'male',
     genderPreference: 'none'
   });
 
@@ -43,7 +42,7 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
           flexibilityMinutes: Number(formData.flexibilityMinutes),
           luggageSize: formData.luggageSize,
           vehiclePreference: formData.vehiclePreference,
-          gender: formData.gender,
+          gender: currentUser.gender, // Pulled straight from user profile
           genderPreference: formData.genderPreference
         })
       });
@@ -52,7 +51,7 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
       if (response.status === 400) {
         toast.error(data.message);
       } else if (data.poolFound) {
-        toast.success("Pool suggested : please check your suggestions .");
+        toast.success("Pool suggested : please check your suggestions.");
         refreshData(); 
       } else {
         toast.success(data.message);
@@ -109,12 +108,8 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
           </select>
         </div>
 
-        <div className="flex gap-2">
-          <select className="flex-[1] bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 outline-none" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})}>
-            <option value="male">I'm Male</option>
-            <option value="female">I'm Female</option>
-          </select>
-          <select className="flex-[2] bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 outline-none" value={formData.genderPreference} onChange={e => setFormData({...formData, genderPreference: e.target.value})}>
+        <div>
+          <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 outline-none" value={formData.genderPreference} onChange={e => setFormData({...formData, genderPreference: e.target.value})}>
             <option value="none">Ride Preference: No Preference</option>
             <option value="prefer_same_gender">Prefer Same Gender</option>
             <option value="same_gender_only">Strictly Same Gender</option>

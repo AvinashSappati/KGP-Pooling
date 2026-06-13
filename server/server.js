@@ -20,8 +20,15 @@ require('./services/passport');
 const app = express();
 const server = http.createServer(app);
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+// 1. Update CORS to accept the future Vercel URL
 app.use(cors({ 
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], 
+  origin: [
+    'http://localhost:5173', 
+    'http://127.0.0.1:5173',
+    process.env.FRONTEND_URL 
+  ], 
   credentials: true 
 }));
 
@@ -29,11 +36,13 @@ app.use(express.json());
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev_secret_key',
-  resave: true,              // Force save
-  saveUninitialized: true,   // Force save
+  resave: true,              
+  saveUninitialized: true,   
   cookie: { 
     maxAge: 30 * 24 * 60 * 60 * 1000,
-    httpOnly: true
+    httpOnly: true,
+    secure: isProduction, 
+    sameSite: isProduction ? 'none' : 'lax'
   }
 }));
 

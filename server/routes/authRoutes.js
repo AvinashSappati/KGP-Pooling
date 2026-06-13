@@ -1,36 +1,50 @@
 const express = require('express');
+const passport = require('passport');
 const router = express.Router();
 const User = require('../models/User');
 
-// Developer mode login : Instantly creates/logs in a test user
+// 1. Google Auth Routes
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => {
+  res.redirect('http://localhost:5173'); 
+});
+
+// 2. Complete Profile Route 
+router.post('/complete-profile', async (req, res) => {
+  try {
+    const { userId, mobile, gender, rollNo } = req.body;
+    const updatedUser = await User.findByIdAndUpdate(userId, { mobile, gender, rollNo }, { new: true });
+    res.status(200).json({ message: "Profile updated!", user: updatedUser });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile." });
+  }
+});
+
+// 3. Sandbox Dev Login
 router.post('/dev_login', (req, res) => {
-  const { name, email } = req.body;
-  
-  // Create a unique, deterministic ID for our 5 test users
+  const { name, email, mobile, gender } = req.body;
   const mockId = "user_" + email.split('@')[0];
+  const user = { _id: mockId, id: mockId, name, email, mobile, gender, rollNo: 'ADMIN_TEST' };
   
-  const user = {
-    _id: mockId,  
-    id: mockId,   
-    name: name,
-    email: email,
-    trustScore: 1000
-  };
-  
-  req.session.user = user; // Save to session
+  req.session.passport = { user: mockId }; // Force passport session
+  req.session.mockUser = user; 
   res.status(200).json(user);
 });
 
-// Check who is logged in
+// 4. Get Current User
 router.get('/current_user', (req, res) => {
-  if (req.session && req.session.user) {
-    res.status(200).json(req.session.user);
+  if (req.user) {
+    res.status(200).json(req.user); // Real Google User
+  } else if (req.session && req.session.mockUser) {
+    res.status(200).json(req.session.mockUser); // Sandbox User
   } else {
     res.status(401).json({ error: "Not logged in" });
   }
 });
 
 router.post('/logout', (req, res) => {
+  req.logout && req.logout((err) => {});
   req.session.destroy();
   res.status(200).json({ message: "Logged out" });
 });

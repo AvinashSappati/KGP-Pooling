@@ -31,7 +31,7 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`http://${window.location.hostname}:5000/api/intents/request-ride`, {
+      const response = await fetch(`https://kgp-pooling.onrender.com/api/intents/request-ride`, {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

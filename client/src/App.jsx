@@ -512,7 +512,10 @@ function App() {
     );
   }
 
-  const isProfileComplete = currentUser.mobile && currentUser.gender && currentUser.rollNo;
+  const isProfileComplete = currentUser && 
+                          currentUser.mobile && 
+                          currentUser.gender && 
+                          currentUser.rollNo;
   if (!isProfileComplete) {
     const handleCompleteProfile = async (e) => {
       e.preventDefault();

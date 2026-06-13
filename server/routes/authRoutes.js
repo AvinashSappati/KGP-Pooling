@@ -5,12 +5,12 @@ const User = require('../models/User');
 
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-// 🔴 THE FIX: req.session.save() prevents the race condition!
 router.get('/google/callback', 
-  passport.authenticate('google', { failureRedirect: 'http://localhost:5173?error=domain_restricted' }), 
+  passport.authenticate('google', { failureRedirect: 'https://kgp-pooling.vercel.app' }), 
   (req, res) => {
+    // 🔴 THE FIX: Force the session to save to the database before redirecting
     req.session.save(() => {
-      res.redirect('http://localhost:5173');
+      res.redirect('https://kgp-pooling.vercel.app');
     });
   }
 );

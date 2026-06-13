@@ -22,6 +22,8 @@ const server = http.createServer(app);
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+app.set('trust proxy', 1);
+
 // 1. Update CORS to accept the future Vercel URL
 app.use(cors({ 
   origin: [

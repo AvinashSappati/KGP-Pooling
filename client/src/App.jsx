@@ -279,7 +279,12 @@ function App() {
                   {activePool || interestedPool ? (
                     <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in Pool (Waiting for Match)</div>
                   ) : (
-                    <button onClick={() => { fetchDashboard(); setMyIntents([]) }} className="w-full bg-red-500 text-white py-3 rounded-xl text-sm font-black hover:bg-red-600 transition shadow-sm active:scale-95">Cancel Ride Request</button>
+                    <button 
+                        onClick={() => handleCancelIntent(intent._id)} 
+                        className="w-full bg-red-500 text-white py-3 rounded-xl text-sm font-black hover:bg-red-600 transition shadow-sm active:scale-95"
+                    >
+                      Cancel Ride Request
+                    </button>
                   )}
                 </div>
               ))

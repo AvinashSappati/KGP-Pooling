@@ -14,6 +14,8 @@ const rideRoutes = require('./routes/rideRoutes');
 const messageRoutes = require('./routes/messageRoutes'); 
 const intentRoutes = require('./routes/intentRoutes');
 const poolRoutes = require('./routes/poolRoutes'); 
+const passport = require('passport');
+require('./services/passport');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +38,9 @@ app.use('/api/rides', rideRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/intents', intentRoutes);
 app.use('/api/pools', poolRoutes); 
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 // sockets.io
 const io = new Server(server, { cors: { origin: true, credentials: true } });

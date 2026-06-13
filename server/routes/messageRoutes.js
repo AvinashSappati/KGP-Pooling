@@ -12,4 +12,24 @@ router.get('/:rideId', async (req, res) => {
   }
 });
 
+// Save a new message to the DB
+router.post('/', async (req, res) => {
+  try {
+    const { rideId, senderId, senderName, text, rideDepartureTime } = req.body;
+    
+    const newMessage = await Message.create({
+      rideId,
+      senderId,
+      senderName,
+      text,
+      rideDepartureTime
+    });
+    
+    res.status(201).json(newMessage);
+  } catch (err) {
+    console.error("Message Save Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

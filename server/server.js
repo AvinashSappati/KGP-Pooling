@@ -18,7 +18,7 @@ const poolRoutes = require('./routes/poolRoutes');
 const app = express();
 const server = http.createServer(app);
 
-// Dev mode : Allow ANY device on the Wi-Fi to connect 
+// Dev mode : On wifi 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
@@ -37,23 +37,29 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/intents', intentRoutes);
 app.use('/api/pools', poolRoutes); 
 
-// Websockets
+// sockets.io
 const io = new Server(server, { cors: { origin: true, credentials: true } });
+
 io.on('connection', (socket) => {
-  // console.log('User connected to Live Node:', socket.id);
-
-  socket.on('join_pool_room', (poolId) => {
-    socket.join(poolId);
-    console.log(`User joined pool chat: ${poolId}`);
+  
+  // Put the user in an isolated room for their specific ride pool
+  socket.on('join_room', (room) => {
+    socket.join(room);
   });
 
-  socket.on('send_message', async (data) => {
-    try {
-      const Message = require('./models/Message');
-      const newMessage = await Message.create(data);
-      io.to(data.poolId).emit('receive_message', newMessage); 
-    } catch(err) { console.error("Socket Error:", err); }
+  // (The DB saving is handled securely by the frontend hitting /api/messages)
+  socket.on('send_message', (data) => {
+    socket.to(data.room).emit('receive_message', data.message);
   });
+
+  socket.on('typing', (data) => {
+    socket.to(data.room).emit('user_typing', data.name);
+  });
+
+  socket.on('stop_typing', (room) => {
+    socket.to(room).emit('user_stopped_typing');
+  });
+
 });
 
 // Database
@@ -61,7 +67,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected successfully'))
   .catch(err => console.error('MongoDB Connection Error:', err));
 
-// --- SERVER START & TERMINAL MAGIC ---
+// Server start 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\nKGPooling Engine running on port ${PORT}`);
@@ -77,11 +83,5 @@ server.listen(PORT, '0.0.0.0', () => {
     }
   }
 
-  /*
-  Multi-device testing 
-  console.log(`User 1 (Avinash) : http://${localIP}:5173`);
-  console.log(`User 2 (Rahul)   : http://${localIP}:5173`);
-  console.log(`User 3 (Priya)   : http://${localIP}:5173`);
-  */
- 
+  //console.log(`➜ http://${localIP}:5173\n`);
 });

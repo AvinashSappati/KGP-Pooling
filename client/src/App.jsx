@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import io from 'socket.io-client';
 import RideRequestForm from './components/RideRequestForm';
 
 const API_URL = `http://${window.location.hostname}:5000`;
+const socket = io(API_URL);
 
 const USER_DIRECTORY = {
   'user_avinash': { name: 'Avinash', phone: '+91 91234 56780' },
@@ -14,7 +16,7 @@ const USER_DIRECTORY = {
 const LiveTimer = ({ startTime }) => {
   const calculateTimeLeft = () => {
     const elapsed = Math.floor((new Date() - new Date(startTime)) / 1000);
-    const left = 300 - elapsed; 
+    const left = 300 - elapsed; // 5 minutes
     return left > 0 ? left : 0;
   };
   
@@ -40,9 +42,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [chatMessage, setChatMessage] = useState("");
-  const [mockMessages, setMockMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState("");
+  const [liveMessages, setLiveMessages] = useState([]);
+  const [typingUser, setTypingUser] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -126,6 +127,106 @@ function App() {
   const displayPools = interestedPool ? [interestedPool] : (myPools.length > 0 ? [myPools[0]] : []);
   const hasActiveIntent = myIntents.length > 0;
 
+  // socket.io + mongodb sync
+  useEffect(() => {
+    if (!activePool) return;
+
+    // 1. Join the secure Socket.IO room for this specific ride
+    socket.emit("join_room", activePool._id);
+
+    // 2. Fetch history so old messages don't disappear
+    const fetchDBMessages = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/messages/${activePool._id}`);
+        if (res.ok) {
+          const dbMessages = await res.json();
+          if (Array.isArray(dbMessages)) {
+            const formatted = dbMessages.map(m => ({
+              id: m._id,
+              text: m.text,
+              sender: m.senderName,
+              time: new Date(m.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            }));
+            setLiveMessages(formatted);
+          }
+        }
+      } catch (err) { console.error("Failed to load chat history"); }
+    };
+    fetchDBMessages();
+
+    // 3. Listen for Live Socket Events from other devices
+    const receiveMessageHandler = (newMsg) => setLiveMessages((prev) => [...prev, newMsg]);
+    const userTypingHandler = (name) => setTypingUser(name);
+    const userStoppedTypingHandler = () => setTypingUser(null);
+
+    socket.on("receive_message", receiveMessageHandler);
+    socket.on("user_typing", userTypingHandler);
+    socket.on("user_stopped_typing", userStoppedTypingHandler);
+
+    return () => {
+      socket.off("receive_message", receiveMessageHandler);
+      socket.off("user_typing", userTypingHandler);
+      socket.off("user_stopped_typing", userStoppedTypingHandler);
+    };
+  }, [activePool]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [liveMessages, typingUser, activeTab]);
+
+  const handleTyping = (e) => {
+    setChatMessage(e.target.value);
+    if (!activePool) return;
+    
+    // Blast typing status over WebSockets
+    if (e.target.value.trim().length > 0) {
+      socket.emit("typing", { room: activePool._id, name: currentUser.name });
+    } else {
+      socket.emit("stop_typing", activePool._id);
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if(!chatMessage.trim() || !activePool) return;
+    
+    const msgText = chatMessage;
+    setChatMessage(""); 
+
+    const newMsg = { 
+      id: Date.now(), 
+      text: msgText, 
+      sender: currentUser.name, 
+      time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
+    };
+    
+    // 1. Update UI instantly for the sender
+    setLiveMessages((prev) => [...prev, newMsg]);
+    
+    // 2. Beam it across the internet via WebSockets
+    socket.emit("send_message", { room: activePool._id, message: newMsg });
+    socket.emit("stop_typing", activePool._id);
+    
+    // 3. Save it permanently to MongoDB
+    const actualDepartureTime = activePool.intents?.find(i => typeof i === 'object' && i.departureTime)?.departureTime || new Date();
+
+    try {
+      await fetch(`${API_URL}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rideId: activePool._id,
+          senderId: currentUser._id || currentUser.id,
+          senderName: currentUser.name,
+          text: msgText,
+          rideDepartureTime: actualDepartureTime 
+        })
+      });
+    } catch (err) {
+      toast.error("Database sync failed, but message was sent.");
+    }
+  };
+
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     return `${d.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
@@ -183,70 +284,81 @@ function App() {
               <p className="text-center font-bold text-slate-400 animate-pulse py-4">Syncing Matchmaker...</p>
             ) : displayPools.length === 0 ? (
               <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-center">
-                <p className="text-slate-500 font-bold text-sm">Searching for others...</p>
+                <span className="text-3xl mb-2 block">📡</span>
+                <p className="text-slate-500 font-bold text-sm mt-2">Searching for others...</p>
               </div>
             ) : (
-              displayPools.map(pool => (
-                <div key={pool._id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-xl relative transition-all">
-                  <div className="flex justify-between items-start mb-4 border-b border-slate-50 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <h3 className="font-black text-slate-900 text-md">Suggested Route</h3>
+              displayPools.map(pool => {
+                const safeStops = pool.uiStops || [];
+                const safeIntents = pool.intents || [];
+                const maxCap = pool.inferredVehicle === 'SUV' ? 4 : (pool.inferredVehicle === 'SEDAN' ? 3 : 4);
+
+                return (
+                  <div key={pool._id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-xl relative transition-all">
+                    <div className="flex justify-between items-start mb-4 border-b border-slate-50 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🚖</span>
+                        <div>
+                          <h3 className="font-black text-slate-900 text-md">Suggested Route</h3>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-block text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1 ${pool.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800' : pool.status === 'gathering' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{pool.status}</span>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase"> Suggested Vehicle: {pool.inferredVehicle}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`inline-block text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1 ${pool.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800' : pool.status === 'gathering' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{pool.status}</span>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase"> Suggested Vehicle: {pool.inferredVehicle}</p>
-                    </div>
-                  </div>
 
-                  <div className="mb-4 border-b border-slate-100 pb-4">
-                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:bg-slate-100">
-                      {pool.uiStops.map((stop, index) => (
-                        <div key={index} className="relative flex items-start gap-4">
-                          <div className={`w-4 h-4 rounded-full border-2 border-white shadow-sm z-10 mt-1 ${index === pool.uiStops.length - 1 ? 'bg-red-500' : index === 0 ? 'bg-emerald-500' : 'bg-slate-900'}`}></div>
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex-1">
-                             <p className="text-xs font-black text-slate-900 mb-1">{stop}</p>
-                             {(pool.intents?.filter(intent => typeof intent === 'object' && (intent.fromNode === stop || intent.toNode === stop)) || []).map((b, i) => (
-                               <div key={i} className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                                  <span>{(USER_DIRECTORY[b.userId] || { name: 'Student' }).name} ({b.gender === 'male' ? 'M' : 'F'})</span>
-                                  <span className="opacity-50">•</span>
-                                  <span>{b.luggageSize === 'none' ? '📱' : b.luggageSize === 'backpack' ? '🎒' : '🧳'} {b.luggageSize}</span>
-                                  {b.toNode === stop && <span className="ml-1 text-red-400 italic">(Drop-off)</span>}
-                               </div>
-                             ))}
-                             {index === 0 && <p className="text-[10px] font-bold text-emerald-500 mt-1">Origin</p>}
-                             {index === pool.uiStops.length - 1 && <p className="text-[10px] font-bold text-red-500 mt-1">Final Destination</p>}
+                    <div className="mb-4 border-b border-slate-100 pb-4">
+                      <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:bg-slate-100">
+                        {safeStops.map((stop, index) => (
+                          <div key={index} className="relative flex items-start gap-4">
+                            <div className={`w-4 h-4 rounded-full border-2 border-white shadow-sm z-10 mt-1 ${index === safeStops.length - 1 ? 'bg-red-500' : index === 0 ? 'bg-emerald-500' : 'bg-slate-900'}`}></div>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex-1">
+                               <p className="text-xs font-black text-slate-900 mb-1">{stop}</p>
+                               {safeIntents.filter(intent => typeof intent === 'object' && (intent.fromNode === stop || intent.toNode === stop)).map((b, i) => (
+                                 <div key={i} className="text-[10px] font-bold text-slate-500 flex flex-col gap-0.5 mt-1">
+                                    <div className="flex items-center gap-1">
+                                      <span>{(USER_DIRECTORY[b.userId] || { name: 'Student' }).name} ({b.gender === 'male' ? 'M' : 'F'})</span>
+                                      <span className="opacity-50">•</span>
+                                      <span>{b.luggageSize === 'none' ? '📱' : b.luggageSize === 'backpack' ? '🎒' : '🧳'} {b.luggageSize}</span>
+                                      {b.toNode === stop && <span className="ml-1 text-red-400 italic">(Drop-off)</span>}
+                                    </div>
+                                    <span className="text-[9px] text-emerald-600 font-bold">🕒 {formatDate(b.departureTime)} (±{b.flexibilityMinutes}m)</span>
+                                 </div>
+                               ))}
+                               {index === 0 && <p className="text-[10px] font-bold text-emerald-500 mt-1">Origin</p>}
+                               {index === safeStops.length - 1 && <p className="text-[10px] font-bold text-red-500 mt-1">Final Destination</p>}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl mb-4">
-                    <div><span className="block text-[9px] font-black text-slate-400 uppercase">Est. Fare</span><span className="text-sm font-black text-slate-900">₹{pool.metrics?.estimatedFarePerPerson || '--'}</span></div>
-                    <div className="text-right"><span className="block text-[9px] font-black text-emerald-500 uppercase">Savings</span><span className="text-sm font-black text-emerald-600">+{pool.metrics?.savingsPercentage || '--'}%</span></div>
-                  </div>
+                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl mb-4">
+                      <div><span className="block text-[9px] font-black text-slate-400 uppercase">Est. Fare</span><span className="text-sm font-black text-slate-900">₹{pool.metrics?.estimatedFarePerPerson || '--'}</span></div>
+                      <div className="text-right"><span className="block text-[9px] font-black text-emerald-500 uppercase">Savings</span><span className="text-sm font-black text-emerald-600">+{pool.metrics?.savingsPercentage || '--'}%</span></div>
+                    </div>
 
-                  {pool.status === 'confirmed' ? (
-                    <button onClick={() => setActiveTab('chat')} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black transition-all text-sm shadow-md animate-pulse">Open Group Chat</button>
-                  ) : pool.acceptances?.includes(currentUser._id) ? (
-                    <div className="w-full bg-blue-50 border border-blue-200 text-blue-800 py-4 rounded-xl font-bold text-center text-sm shadow-sm flex flex-col items-center gap-1">
-                      <span>Waiting for Others... ({pool.acceptances.length} / {pool.inferredVehicle === 'SUV' ? 4 : (pool.inferredVehicle === 'SEDAN' ? 3 : 4)} Max Capacity)</span>
-                      {pool.gatheringStartedAt && (
-                        <span className="text-[10px] font-black bg-blue-200 px-2 py-1 rounded-md text-blue-900 mt-1 shadow-inner">
-                          Auto-Confirm in <LiveTimer startTime={pool.gatheringStartedAt} />
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button onClick={() => respondToPool(pool._id, 'decline')} className="flex-1 bg-white text-slate-700 py-3 rounded-xl font-bold border border-slate-200 text-sm active:scale-95">Decline</button>
-                      <button onClick={() => respondToPool(pool._id, 'interested')} className="flex-[2] bg-slate-900 text-white py-3 rounded-xl font-black shadow-md text-sm active:scale-95">Interested</button>
-                    </div>
-                  )}
-                </div>
-              ))
+                    {pool.status === 'confirmed' ? (
+                      <button onClick={() => setActiveTab('chat')} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black transition-all text-sm shadow-md animate-pulse">Open Group Chat</button>
+                    ) : pool.acceptances?.includes(currentUser._id) ? (
+                      <div className="w-full bg-blue-50 border border-blue-200 text-blue-800 py-4 rounded-xl font-bold text-center text-sm shadow-sm flex flex-col items-center gap-1">
+                        <span>Waiting for Others... ({pool.acceptances?.length || 0} / {maxCap} Max Capacity)</span>
+                        {pool.gatheringStartedAt && (
+                          <span className="text-[10px] font-black bg-blue-200 px-2 py-1 rounded-md text-blue-900 mt-1 shadow-inner">
+                            Auto-Confirm in <LiveTimer startTime={pool.gatheringStartedAt} />
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button onClick={() => respondToPool(pool._id, 'decline')} className="flex-1 bg-white text-slate-700 py-3 rounded-xl font-bold border border-slate-200 text-sm active:scale-95">Decline</button>
+                        <button onClick={() => respondToPool(pool._id, 'interested')} className="flex-[2] bg-slate-900 text-white py-3 rounded-xl font-black shadow-md text-sm active:scale-95">Interested</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -255,11 +367,11 @@ function App() {
   );
 
   const renderChatScreen = () => {
-    if (!currentUser) return <div className="pt-32 text-center font-bold text-slate-400">Please Login</div>;
+    if (!currentUser) return <div className="pt-24 text-center font-bold text-slate-400">Please Login</div>;
     
     if (!activePool) {
       return (
-        <div className="p-4 pb-24 pt-32 h-screen flex flex-col items-center text-center bg-slate-50">
+        <div className="p-4 pb-32 pt-24 flex flex-col items-center text-center bg-slate-50 h-full">
           <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-3xl shadow-inner mb-4">💬</div>
           <h2 className="text-xl font-black text-slate-900 mb-2">No Active Chats</h2>
           <p className="text-slate-500 font-bold text-sm px-6">You are not in a confirmed pool yet. Join a ride on your feed to unlock the chat.</p>
@@ -268,74 +380,69 @@ function App() {
       );
     }
 
-    const handleSendMessage = (e) => {
-      e.preventDefault();
-      if(!chatMessage.trim()) return;
-      const newMsg = { id: Date.now(), text: chatMessage, sender: currentUser.name, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
-      setMockMessages([...mockMessages, newMsg]);
-      setChatMessage("");
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-
-      const otherMembers = activePool.acceptances
-        .map(id => USER_DIRECTORY[id]?.name)
-        .filter(n => n && n !== currentUser.name);
-        
-      const responder = otherMembers[0] || "Co-Rider";
-      
-      setTimeout(() => {
-        setTypingUser(responder);
-        setIsTyping(true);
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        
-        setTimeout(() => {
-          setIsTyping(false);
-          setMockMessages(prev => [...prev, { id: Date.now(), text: "Got it! See you there.", sender: responder, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 2000);
-      }, 1000);
-    };
-
     const isCoordinator = activePool.coordinator === currentUser._id;
+    const safeAcceptances = activePool.acceptances || [];
+    const safeStops = activePool.uiStops || [];
+    const safeIntents = activePool.intents || [];
 
     return (
-      <div className="flex flex-col h-screen pt-16 bg-slate-50 relative">
+      <div className="flex flex-col h-full pt-16 bg-slate-50 relative pb-[70px]">
         <div className="bg-white border-b border-slate-200 p-4 shadow-sm z-10 flex-shrink-0">
-          <div className="flex justify-between items-center mb-3">
-            <div>
-              <h2 className="font-black text-slate-900 leading-tight">Confirmed Pool</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{activePool.inferredVehicle} • {activePool.acceptances.length} Riders</span>
-                {isCoordinator && <span className="text-[8px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black uppercase">You are Coordinator</span>}
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center">
+              <button onClick={() => setActiveTab('ride')} className="mr-3 text-slate-500 hover:text-slate-900 active:scale-95 transition-all text-xl pb-1">←</button>
+              <div>
+                <h2 className="font-black text-slate-900 leading-tight">Confirmed Pool</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{activePool.inferredVehicle || 'Vehicle'} • {safeAcceptances.length} Riders</span>
+                  {isCoordinator && <span className="text-[8px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black uppercase">You are Coordinator</span>}
+                </div>
               </div>
             </div>
+            <div className="bg-slate-100 p-2 rounded-lg text-center min-w-[70px]">
+              <span className="block text-[8px] font-black text-slate-400 uppercase">Est. Fare</span>
+              <span className="font-black text-slate-900 text-sm">₹{activePool.metrics?.estimatedFarePerPerson || '--'}</span>
+            </div>
           </div>
-          
-          <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-xs font-bold text-blue-800 mb-3 shadow-inner space-y-1">
-             <span className="text-[9px] uppercase tracking-widest opacity-50 block mb-2 border-b border-blue-200 pb-1">Emergency Directory</span>
-             {activePool.acceptances.map((id, index) => {
-               const pUser = USER_DIRECTORY[id];
-               const isCoord = activePool.coordinator === id;
-               return (
-                 <div key={index} className="flex justify-between items-center">
-                   <span>{isCoord ? '👑 ' : '👤 '}{pUser?.name || 'Rider'}</span>
-                   <span className="font-black tracking-wider">{pUser?.phone || '+91 00000 00000'}</span>
-                 </div>
-               );
-             })}
+
+          <div className="space-y-3 relative before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:bg-slate-100 mb-2">
+            {safeStops.map((stop, index) => (
+              <div key={index} className="relative flex items-start gap-4">
+                <div className={`w-3 h-3 rounded-full border-2 border-white shadow-sm z-10 mt-1 ${index === safeStops.length - 1 ? 'bg-red-500' : index === 0 ? 'bg-emerald-500' : 'bg-slate-900'}`}></div>
+                <div className="flex-1">
+                    <p className="text-[11px] font-black text-slate-900">{stop}</p>
+                    {safeIntents.filter(intent => typeof intent === 'object' && (intent.fromNode === stop || intent.toNode === stop)).map((b, i) => (
+                      <div key={i} className="text-[9px] font-bold text-slate-500 flex flex-col gap-0.5 mt-1">
+                        <div className="flex items-center gap-1">
+                          <span>{(USER_DIRECTORY[b.userId] || { name: 'Student' }).name} ({b.gender === 'male' ? 'M' : 'F'})</span>
+                          <span className="opacity-50">•</span>
+                          <span>{b.luggageSize === 'none' ? '📱' : b.luggageSize === 'backpack' ? '🎒' : '🧳'}</span>
+                          <span className="opacity-50">•</span>
+                          <span className="text-slate-700 tracking-wide">{(USER_DIRECTORY[b.userId] || {}).phone || ''}</span>
+                          {b.toNode === stop && <span className="text-red-400 italic">(Drop)</span>}
+                        </div>
+                        <div className="text-emerald-600 font-medium">
+                          🕒 {formatDate(b.departureTime)} (±{b.flexibilityMinutes}m)
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
-          <div className="text-center"><span className="bg-slate-200 text-slate-500 text-[10px] font-black uppercase px-3 py-1 rounded-full">Chat securely opened</span></div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
+          <div className="text-center"><span className="bg-slate-200 text-slate-500 text-[9px] font-black uppercase px-3 py-1 rounded-full">Secure Live Chat</span></div>
           
           <div className="flex flex-col gap-1 items-start">
             <span className="text-[10px] font-bold text-slate-400 ml-2">System (Automated)</span>
             <div className="bg-emerald-100 border border-emerald-200 text-emerald-900 p-3 rounded-2xl rounded-tl-sm text-sm font-medium max-w-[85%] shadow-sm">
-              You are locked into this ride. The Coordinator must finalize the exact fare with the driver. Please coordinate your ride here .
+              You are locked into this ride. The Coordinator must finalize the exact fare with the driver. Use this chat to locate each other!
             </div>
           </div>
 
-          {mockMessages.map(msg => (
+          {(liveMessages || []).map(msg => (
             <div key={msg.id} className={`flex flex-col gap-1 ${msg.sender === currentUser.name ? 'items-end' : 'items-start'}`}>
               <span className="text-[10px] font-bold text-slate-400 mx-2">{msg.sender} • {msg.time}</span>
               <div className={`p-3 rounded-2xl text-sm font-medium max-w-[85%] shadow-sm ${msg.sender === currentUser.name ? 'bg-slate-900 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-sm'}`}>
@@ -344,7 +451,7 @@ function App() {
             </div>
           ))}
           
-          {isTyping && (
+          {typingUser && typingUser !== currentUser.name && (
              <div className="flex flex-col gap-1 items-start animate-fade-in">
                 <span className="text-[10px] font-bold text-slate-400 ml-2">{typingUser} is typing...</span>
                 <div className="bg-white border border-slate-100 text-slate-500 p-3 rounded-2xl rounded-tl-sm text-sm font-medium shadow-sm flex gap-1 items-center">
@@ -354,12 +461,11 @@ function App() {
                 </div>
              </div>
           )}
-
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSendMessage} className="bg-white border-t border-slate-200 p-3 pb-6 fixed bottom-0 w-full max-w-md flex gap-2 z-20 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-          <input type="text" value={chatMessage} onChange={(e)=>setChatMessage(e.target.value)} placeholder="Message the pool..." className="flex-1 bg-slate-100 border-none rounded-full px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900" />
+        <form onSubmit={handleSendMessage} className="bg-white border-t border-slate-200 p-3 fixed bottom-[65px] w-full max-w-md flex gap-2 z-20 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
+          <input type="text" value={chatMessage} onChange={handleTyping} placeholder="Message the pool..." className="flex-1 bg-slate-100 border-none rounded-full px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900" />
           <button type="submit" className="bg-emerald-600 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-all">↑</button>
         </form>
       </div>
@@ -398,19 +504,22 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col">
       <Toaster position="top-center" />
+      
       {activeTab !== 'chat' && (
-        <header className="absolute top-0 w-full flex items-center gap-2 p-4 z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200">
+        <header className="absolute top-0 w-full max-w-md flex items-center gap-2 p-4 z-50 bg-slate-50/90 backdrop-blur-md border-b border-slate-200">
           <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center font-black text-white text-sm shadow-md">KGP</div>
           <h1 className="text-xl font-black tracking-tight text-slate-900">Pooling</h1>
         </header>
       )}
-      <main className="h-full overflow-y-auto">
+
+      <main className="flex-1 overflow-y-auto w-full h-full relative">
         {activeTab === 'ride' && (currentUser ? renderRideScreen() : <div className="pt-40 text-center font-bold text-slate-400">Please Login</div>)}
         {activeTab === 'chat' && renderChatScreen()}
         {activeTab === 'profile' && renderProfileScreen()}
       </main>
+
       {activeTab !== 'chat' && (
         <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-200 flex justify-around items-center pt-3 pb-6 px-2 z-50">
           {[{ id: 'ride', icon: '🚖', label: 'Ride' }, { id: 'chat', icon: '💬', label: 'Chats' }, { id: 'profile', icon: '👤', label: 'Profile' }].map((tab) => (

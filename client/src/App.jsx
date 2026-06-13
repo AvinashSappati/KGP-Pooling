@@ -108,6 +108,26 @@ function App() {
     if (activeTab === 'ride' && currentUser) fetchDashboard();
   }, [activeTab, rideToggle, currentUser]);
 
+  const handleCancelIntent = async (intentId) => {
+    const toastId = toast.loading("Canceling ride request...");
+    try {
+      const res = await fetch(`${API_URL}/api/intents/${intentId}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        toast.success("Ride request canceled.", { id: toastId });
+        setMyIntents([]); // Clear it locally
+        setRideToggle('intents'); // Kick them back to the creation screen
+        fetchDashboard(); // Sync with DB
+      } else {
+        toast.error("Failed to cancel on server.", { id: toastId });
+      }
+    } catch (err) { 
+      toast.error("Network error.", { id: toastId }); 
+    }
+  };
+
   const respondToPool = async (poolId, action) => {
     const toastId = toast.loading(action === 'interested' ? "Locking in..." : "Declining...");
     try {

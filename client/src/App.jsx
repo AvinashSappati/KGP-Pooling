@@ -1,0 +1,428 @@
+import { useState, useEffect, useRef } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import RideRequestForm from './components/RideRequestForm';
+
+const API_URL = `http://${window.location.hostname}:5000`;
+
+const USER_DIRECTORY = {
+  'user_avinash': { name: 'Avinash', phone: '+91 91234 56780' },
+  'user_rahul': { name: 'Rahul', phone: '+91 99887 76655' },
+  'user_priya': { name: 'Priya', phone: '+91 98765 43210' },
+  'user_aman': { name: 'Aman', phone: '+91 91111 22222' }
+};
+
+const LiveTimer = ({ startTime }) => {
+  const calculateTimeLeft = () => {
+    const elapsed = Math.floor((new Date() - new Date(startTime)) / 1000);
+    const left = 300 - elapsed; 
+    return left > 0 ? left : 0;
+  };
+  
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 1000);
+    return () => clearInterval(timer);
+  }, [startTime]);
+
+  const mins = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  return <span className="font-mono">{mins}:{secs < 10 ? '0' : ''}{secs}</span>;
+};
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('ride'); 
+  const [rideToggle, setRideToggle] = useState('intents'); 
+  
+  const [myIntents, setMyIntents] = useState([]);
+  const [myPools, setMyPools] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [chatMessage, setChatMessage] = useState("");
+  const [mockMessages, setMockMessages] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUser, setTypingUser] = useState("");
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/current_user`, { credentials: 'include' });
+        if (res.ok) {
+          const user = await res.json();
+          if (user && user._id) setCurrentUser(user);
+        }
+      } catch (err) { console.log("Viewing as guest."); }
+    };
+    checkAuth(); 
+  }, []);
+
+  const handleDevLogin = async (name, email, mobile) => {
+    const mockId = "user_" + email.split('@')[0];
+    const user = { _id: mockId, id: mockId, name, email, mobile };
+    setCurrentUser(user);
+    setActiveTab('ride');
+    setRideToggle('pools'); 
+    toast.success(`Logged in as ${name}`);
+  };
+
+  const handleDevLogout = () => {
+    setCurrentUser(null);
+    setMyIntents([]);
+    setMyPools([]);
+    setActiveTab('profile');
+  };
+
+  const fetchDashboard = async () => {
+    if (!currentUser?._id) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/intents/dashboard?userId=${currentUser._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMyIntents(data.intents || []);
+        setMyPools(data.pools || []);
+      }
+    } catch (err) { toast.error("Failed to sync network."); } 
+    finally { setIsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'ride' && currentUser) fetchDashboard();
+  }, [activeTab, rideToggle, currentUser]);
+
+  const deleteIntent = async (intentId) => {
+    const toastId = toast.loading("Deleting intent...");
+    try {
+      const res = await fetch(`${API_URL}/api/intents/delete`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intentId, userId: currentUser._id })
+      });
+      if (res.ok) {
+        toast.success("Intent removed.", { id: toastId });
+        fetchDashboard(); 
+        setRideToggle('intents'); 
+      }
+    } catch (err) { toast.error("Error deleting intent.", { id: toastId }); }
+  };
+
+  const respondToPool = async (poolId, action) => {
+    const toastId = toast.loading(action === 'interested' ? "Locking in..." : "Declining...");
+    try {
+      const res = await fetch(`${API_URL}/api/intents/respond`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poolId, userId: currentUser._id, action })
+      });
+      if (res.ok) {
+        toast.success(action === 'interested' ? "Locked In " : "Declined.", { id: toastId });
+        fetchDashboard();
+      }
+    } catch (err) { toast.error("Failed action.", { id: toastId }); }
+  };
+
+  const activePool = myPools.find(p => p.status === 'confirmed');
+  const interestedPool = myPools.find(p => p.acceptances?.includes(currentUser?._id));
+  const displayPools = interestedPool ? [interestedPool] : (myPools.length > 0 ? [myPools[0]] : []);
+  const hasActiveIntent = myIntents.length > 0;
+
+  const formatDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return `${d.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+  };
+
+  const renderRideScreen = () => (
+    <div className="p-4 pb-24 pt-20">
+      <div className="bg-slate-200 p-1 rounded-xl flex mb-6 shadow-inner">
+        <button onClick={() => setRideToggle('intents')} className={`flex-1 py-2 font-bold rounded-lg transition-all text-sm ${rideToggle === 'intents' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Create Intent</button>
+        <button onClick={() => setRideToggle('pools')} className={`flex-1 py-2 font-bold rounded-lg transition-all text-sm ${rideToggle === 'pools' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Suggested Pools</button>
+      </div>
+
+      {rideToggle === 'intents' ? (
+        hasActiveIntent ? (
+          <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200 text-center shadow-sm">
+            <h3 className="font-black text-amber-800 text-lg">Intent Already Active</h3>
+            <p className="text-amber-700 text-sm font-medium mt-2 mb-4">You can only have one active travel intent at a time.</p>
+            <button onClick={() => setRideToggle('pools')} className="w-full bg-amber-600 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95">View Suggested Pools</button>
+          </div>
+        ) : (
+          <RideRequestForm currentUser={currentUser} refreshData={() => { fetchDashboard(); setRideToggle('pools'); }} />
+        )
+      ) : (
+        <div className="space-y-8 animate-fade-in">
+          <div className="space-y-3">
+            <h3 className="text-xs font-black text-slate-400 tracking-widest uppercase border-b border-slate-200 pb-2">My Active Intents</h3>
+            {myIntents.length === 0 ? (
+              <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-300 text-center text-slate-400 font-bold text-sm">No active travel requests.</div>
+            ) : (
+              myIntents.map(intent => (
+                <div key={intent._id} className="bg-slate-900 p-5 rounded-2xl shadow-md text-white">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-black text-lg leading-tight">{intent.fromNode} ➔ <br/>{intent.toNode}</p>
+                      <p className="text-emerald-400 font-bold text-sm mt-1">{formatDate(intent.departureTime)} ±{intent.flexibilityMinutes}m</p>
+                    </div>
+                    <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase">Active</span>
+                  </div>
+                  {activePool || interestedPool ? (
+                    <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in the Pool ( Waiting for Match )</div>
+                  ) : (
+                    <button onClick={() => deleteIntent(intent._id)} className="w-full bg-red-500 text-white py-3 rounded-xl text-sm font-black hover:bg-red-600 transition shadow-sm active:scale-95">Cancel Ride Request</button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-end border-b border-slate-200 pb-2">
+              <h3 className="text-xs font-black text-slate-400 tracking-widest uppercase">My Matches</h3>
+              <button onClick={fetchDashboard} className="text-[10px] font-bold text-slate-400 hover:text-slate-900 bg-slate-200 px-2 py-1 rounded-md">↻ Refresh Feed</button>
+            </div>
+            {isLoading ? (
+              <p className="text-center font-bold text-slate-400 animate-pulse py-4">Syncing Matchmaker...</p>
+            ) : displayPools.length === 0 ? (
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-center">
+                <p className="text-slate-500 font-bold text-sm">Searching for others...</p>
+              </div>
+            ) : (
+              displayPools.map(pool => (
+                <div key={pool._id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-xl relative transition-all">
+                  <div className="flex justify-between items-start mb-4 border-b border-slate-50 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <h3 className="font-black text-slate-900 text-md">Suggested Route</h3>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-block text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1 ${pool.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800' : pool.status === 'gathering' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{pool.status}</span>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase"> Suggested Vehicle: {pool.inferredVehicle}</p>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 border-b border-slate-100 pb-4">
+                    <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2 before:h-full before:w-0.5 before:bg-slate-100">
+                      {pool.uiStops.map((stop, index) => (
+                        <div key={index} className="relative flex items-start gap-4">
+                          <div className={`w-4 h-4 rounded-full border-2 border-white shadow-sm z-10 mt-1 ${index === pool.uiStops.length - 1 ? 'bg-red-500' : index === 0 ? 'bg-emerald-500' : 'bg-slate-900'}`}></div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex-1">
+                             <p className="text-xs font-black text-slate-900 mb-1">{stop}</p>
+                             {(pool.intents?.filter(intent => typeof intent === 'object' && (intent.fromNode === stop || intent.toNode === stop)) || []).map((b, i) => (
+                               <div key={i} className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                                  <span>{(USER_DIRECTORY[b.userId] || { name: 'Student' }).name} ({b.gender === 'male' ? 'M' : 'F'})</span>
+                                  <span className="opacity-50">•</span>
+                                  <span>{b.luggageSize === 'none' ? '📱' : b.luggageSize === 'backpack' ? '🎒' : '🧳'} {b.luggageSize}</span>
+                                  {b.toNode === stop && <span className="ml-1 text-red-400 italic">(Drop-off)</span>}
+                               </div>
+                             ))}
+                             {index === 0 && <p className="text-[10px] font-bold text-emerald-500 mt-1">Origin</p>}
+                             {index === pool.uiStops.length - 1 && <p className="text-[10px] font-bold text-red-500 mt-1">Final Destination</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl mb-4">
+                    <div><span className="block text-[9px] font-black text-slate-400 uppercase">Est. Fare</span><span className="text-sm font-black text-slate-900">₹{pool.metrics?.estimatedFarePerPerson || '--'}</span></div>
+                    <div className="text-right"><span className="block text-[9px] font-black text-emerald-500 uppercase">Savings</span><span className="text-sm font-black text-emerald-600">+{pool.metrics?.savingsPercentage || '--'}%</span></div>
+                  </div>
+
+                  {pool.status === 'confirmed' ? (
+                    <button onClick={() => setActiveTab('chat')} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black transition-all text-sm shadow-md animate-pulse">Open Group Chat</button>
+                  ) : pool.acceptances?.includes(currentUser._id) ? (
+                    <div className="w-full bg-blue-50 border border-blue-200 text-blue-800 py-4 rounded-xl font-bold text-center text-sm shadow-sm flex flex-col items-center gap-1">
+                      <span>Waiting for Others... ({pool.acceptances.length} / {pool.inferredVehicle === 'SUV' ? 4 : (pool.inferredVehicle === 'SEDAN' ? 3 : 4)} Max Capacity)</span>
+                      {pool.gatheringStartedAt && (
+                        <span className="text-[10px] font-black bg-blue-200 px-2 py-1 rounded-md text-blue-900 mt-1 shadow-inner">
+                          Auto-Confirm in <LiveTimer startTime={pool.gatheringStartedAt} />
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => respondToPool(pool._id, 'decline')} className="flex-1 bg-white text-slate-700 py-3 rounded-xl font-bold border border-slate-200 text-sm active:scale-95">Decline</button>
+                      <button onClick={() => respondToPool(pool._id, 'interested')} className="flex-[2] bg-slate-900 text-white py-3 rounded-xl font-black shadow-md text-sm active:scale-95">Interested</button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderChatScreen = () => {
+    if (!currentUser) return <div className="pt-32 text-center font-bold text-slate-400">Please Login</div>;
+    
+    if (!activePool) {
+      return (
+        <div className="p-4 pb-24 pt-32 h-screen flex flex-col items-center text-center bg-slate-50">
+          <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-3xl shadow-inner mb-4">💬</div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">No Active Chats</h2>
+          <p className="text-slate-500 font-bold text-sm px-6">You are not in a confirmed pool yet. Join a ride on your feed to unlock the chat.</p>
+          <button onClick={() => setActiveTab('ride')} className="mt-8 bg-slate-900 text-white px-8 py-4 rounded-xl font-black shadow-md active:scale-95">Go to Ride Feed</button>
+        </div>
+      );
+    }
+
+    const handleSendMessage = (e) => {
+      e.preventDefault();
+      if(!chatMessage.trim()) return;
+      const newMsg = { id: Date.now(), text: chatMessage, sender: currentUser.name, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
+      setMockMessages([...mockMessages, newMsg]);
+      setChatMessage("");
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+      const otherMembers = activePool.acceptances
+        .map(id => USER_DIRECTORY[id]?.name)
+        .filter(n => n && n !== currentUser.name);
+        
+      const responder = otherMembers[0] || "Co-Rider";
+      
+      setTimeout(() => {
+        setTypingUser(responder);
+        setIsTyping(true);
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        
+        setTimeout(() => {
+          setIsTyping(false);
+          setMockMessages(prev => [...prev, { id: Date.now(), text: "Got it! See you there.", sender: responder, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 2000);
+      }, 1000);
+    };
+
+    const isCoordinator = activePool.coordinator === currentUser._id;
+
+    return (
+      <div className="flex flex-col h-screen pt-16 bg-slate-50 relative">
+        <div className="bg-white border-b border-slate-200 p-4 shadow-sm z-10 flex-shrink-0">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h2 className="font-black text-slate-900 leading-tight">Confirmed Pool</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{activePool.inferredVehicle} • {activePool.acceptances.length} Riders</span>
+                {isCoordinator && <span className="text-[8px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black uppercase">You are Coordinator</span>}
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-xs font-bold text-blue-800 mb-3 shadow-inner space-y-1">
+             <span className="text-[9px] uppercase tracking-widest opacity-50 block mb-2 border-b border-blue-200 pb-1">Emergency Directory</span>
+             {activePool.acceptances.map((id, index) => {
+               const pUser = USER_DIRECTORY[id];
+               const isCoord = activePool.coordinator === id;
+               return (
+                 <div key={index} className="flex justify-between items-center">
+                   <span>{isCoord ? '👑 ' : '👤 '}{pUser?.name || 'Rider'}</span>
+                   <span className="font-black tracking-wider">{pUser?.phone || '+91 00000 00000'}</span>
+                 </div>
+               );
+             })}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+          <div className="text-center"><span className="bg-slate-200 text-slate-500 text-[10px] font-black uppercase px-3 py-1 rounded-full">Chat securely opened</span></div>
+          
+          <div className="flex flex-col gap-1 items-start">
+            <span className="text-[10px] font-bold text-slate-400 ml-2">System (Automated)</span>
+            <div className="bg-emerald-100 border border-emerald-200 text-emerald-900 p-3 rounded-2xl rounded-tl-sm text-sm font-medium max-w-[85%] shadow-sm">
+              You are locked into this ride. The Coordinator must finalize the exact fare with the driver. Please coordinate your ride here .
+            </div>
+          </div>
+
+          {mockMessages.map(msg => (
+            <div key={msg.id} className={`flex flex-col gap-1 ${msg.sender === currentUser.name ? 'items-end' : 'items-start'}`}>
+              <span className="text-[10px] font-bold text-slate-400 mx-2">{msg.sender} • {msg.time}</span>
+              <div className={`p-3 rounded-2xl text-sm font-medium max-w-[85%] shadow-sm ${msg.sender === currentUser.name ? 'bg-slate-900 text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-sm'}`}>
+                {msg.text}
+              </div>
+            </div>
+          ))}
+          
+          {isTyping && (
+             <div className="flex flex-col gap-1 items-start animate-fade-in">
+                <span className="text-[10px] font-bold text-slate-400 ml-2">{typingUser} is typing...</span>
+                <div className="bg-white border border-slate-100 text-slate-500 p-3 rounded-2xl rounded-tl-sm text-sm font-medium shadow-sm flex gap-1 items-center">
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                </div>
+             </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        <form onSubmit={handleSendMessage} className="bg-white border-t border-slate-200 p-3 pb-6 fixed bottom-0 w-full max-w-md flex gap-2 z-20 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
+          <input type="text" value={chatMessage} onChange={(e)=>setChatMessage(e.target.value)} placeholder="Message the pool..." className="flex-1 bg-slate-100 border-none rounded-full px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900" />
+          <button type="submit" className="bg-emerald-600 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-all">↑</button>
+        </form>
+      </div>
+    );
+  };
+
+  const renderProfileScreen = () => {
+    if (!currentUser) return (
+      <div className="p-4 pb-24 pt-32 flex flex-col items-center text-center font-sans h-screen bg-slate-50">
+        <div className="w-20 h-20 rounded-3xl bg-slate-900 flex items-center justify-center font-black text-white text-4xl mb-6 shadow-2xl">KGP</div>
+        <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Pooling</h1>
+        <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-lg w-full max-w-sm space-y-2 mt-8">
+          <button onClick={() => handleDevLogin('Avinash (M)', 'avinash@kgp.ac.in', '+91 91234 56780')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all">1. Login as Avinash</button>
+          <button onClick={() => handleDevLogin('Rahul (M)', 'rahul@kgp.ac.in', '+91 99887 76655')} className="w-full bg-blue-50 text-blue-700 py-3 rounded-xl font-bold border border-blue-100 active:scale-95 transition-all">2. Login as Rahul</button>
+          <button onClick={() => handleDevLogin('Priya (F)', 'priya@kgp.ac.in', '+91 98765 43210')} className="w-full bg-pink-50 text-pink-700 py-3 rounded-xl font-bold border border-pink-100 active:scale-95 transition-all">3. Login as Priya</button>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="p-4 pb-24 pt-20">
+        <h2 className="text-2xl font-bold text-slate-900 mb-6">Profile</h2>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-6">
+          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+            <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center text-xl font-black text-slate-500">{currentUser?.name?.charAt(0) || 'U'}</div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-lg leading-tight">{currentUser?.name}</h3>
+              <p className="text-slate-500 text-xs mt-1">{currentUser?.email}</p>
+              <p className="text-slate-400 text-[10px] mt-1 font-bold">📱 {currentUser?.mobile}</p>
+            </div>
+          </div>
+        </div>
+        <button onClick={handleDevLogout} className="w-full bg-red-50 text-red-600 border border-red-100 font-bold py-4 rounded-xl shadow-sm hover:bg-red-100 active:scale-95 transition-all">Dev Logout</button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden">
+      <Toaster position="top-center" />
+      {activeTab !== 'chat' && (
+        <header className="absolute top-0 w-full flex items-center gap-2 p-4 z-10 bg-slate-50/90 backdrop-blur-md border-b border-slate-200">
+          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center font-black text-white text-sm shadow-md">KGP</div>
+          <h1 className="text-xl font-black tracking-tight text-slate-900">Pooling</h1>
+        </header>
+      )}
+      <main className="h-full overflow-y-auto">
+        {activeTab === 'ride' && (currentUser ? renderRideScreen() : <div className="pt-40 text-center font-bold text-slate-400">Please Login</div>)}
+        {activeTab === 'chat' && renderChatScreen()}
+        {activeTab === 'profile' && renderProfileScreen()}
+      </main>
+      {activeTab !== 'chat' && (
+        <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-200 flex justify-around items-center pt-3 pb-6 px-2 z-50">
+          {[{ id: 'ride', icon: '🚖', label: 'Ride' }, { id: 'chat', icon: '💬', label: 'Chats' }, { id: 'profile', icon: '👤', label: 'Profile' }].map((tab) => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1 w-20 transition-all ${activeTab === tab.id ? 'text-slate-900 scale-110' : 'text-slate-400 hover:text-slate-600'}`}>
+              <span className={`text-2xl ${activeTab === tab.id ? 'opacity-100' : 'opacity-60 grayscale'}`}>{tab.icon}</span>
+              <span className={`text-[10px] font-bold ${activeTab === tab.id ? 'text-slate-900' : 'text-slate-400'}`}>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
+
+export default App;

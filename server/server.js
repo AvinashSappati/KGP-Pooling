@@ -22,7 +22,6 @@ const server = http.createServer(app);
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-app.set('trust proxy', 1);
 
 // 1. Update CORS to accept the future Vercel URL
 app.use(cors({ 
@@ -37,6 +36,8 @@ app.use(cors({
 
 app.use(express.json());
 
+app.set('trust proxy', 1);
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev_secret_key',
   resave: true,              
@@ -49,6 +50,9 @@ app.use(session({
   }
 }));
 
+app.use(passport.initialize());
+app.use(passport.session());
+
 // routes 
 app.use('/auth', authRoutes);
 app.use('/api/rides', rideRoutes);
@@ -56,8 +60,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/intents', intentRoutes);
 app.use('/api/pools', poolRoutes); 
 
-app.use(passport.initialize());
-app.use(passport.session());
+
 
 // sockets.io
 const io = new Server(server, { cors: { origin: true, credentials: true } });

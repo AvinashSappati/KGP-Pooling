@@ -3,7 +3,8 @@ import toast, { Toaster } from 'react-hot-toast';
 import io from 'socket.io-client';
 import RideRequestForm from './components/RideRequestForm';
 
-const API_URL = `http://${window.location.hostname}:5000`;
+// Hardcoded for localhost cookie locking
+const API_URL = 'http://localhost:5000';
 const socket = io(API_URL);
 
 const USER_DIRECTORY = {
@@ -34,6 +35,7 @@ const LiveTimer = ({ startTime }) => {
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState('ride'); 
   const [rideToggle, setRideToggle] = useState('intents'); 
   
@@ -47,6 +49,12 @@ function App() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('error') === 'domain_restricted') {
+      toast.error("Access Denied: Only @kgpian.iitkgp.ac.in accounts allowed!", { duration: 5000 });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const checkAuth = async () => {
       try {
         const res = await fetch(`${API_URL}/auth/current_user`, { credentials: 'include' });
@@ -54,25 +62,33 @@ function App() {
           const user = await res.json();
           if (user && user._id) setCurrentUser(user);
         }
-      } catch (err) { console.log("Viewing as guest."); }
+      } catch (err) { console.log("Not logged in."); }
+      finally { setIsCheckingAuth(false); }
     };
     checkAuth(); 
   }, []);
 
   const handleDevLogin = async (name, email, mobile, gender) => {
-    const mockId = "user_" + email.split('@')[0];
-    const user = { _id: mockId, id: mockId, name, email, mobile, gender, rollNo: 'ADMIN_TEST' };
-    setCurrentUser(user);
-    setActiveTab('ride');
-    setRideToggle('pools'); 
-    toast.success(`Sandbox Mode: ${name}`);
+    try {
+      const res = await fetch(`${API_URL}/auth/dev_login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, mobile, gender })
+      });
+      if (res.ok) {
+        const user = await res.json();
+        setCurrentUser(user);
+        toast.success(`Sandbox Mode: Connected as ${name}`);
+      }
+    } catch (err) { toast.error("Sandbox authentication down."); }
   };
 
-  const handleDevLogout = () => {
+  const handleDevLogout = async () => {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST' });
     setCurrentUser(null);
     setMyIntents([]);
     setMyPools([]);
-    setActiveTab('profile');
+    setActiveTab('ride');
+    setRideToggle('intents');
   };
 
   const fetchDashboard = async () => {
@@ -92,21 +108,6 @@ function App() {
   useEffect(() => {
     if (activeTab === 'ride' && currentUser) fetchDashboard();
   }, [activeTab, rideToggle, currentUser]);
-
-  const deleteIntent = async (intentId) => {
-    const toastId = toast.loading("Deleting intent...");
-    try {
-      const res = await fetch(`${API_URL}/api/intents/delete`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intentId, userId: currentUser._id })
-      });
-      if (res.ok) {
-        toast.success("Intent removed.", { id: toastId });
-        fetchDashboard(); 
-        setRideToggle('intents'); 
-      }
-    } catch (err) { toast.error("Error deleting intent.", { id: toastId }); }
-  };
 
   const respondToPool = async (poolId, action) => {
     const toastId = toast.loading(action === 'interested' ? "Locking in..." : "Declining...");
@@ -233,7 +234,6 @@ function App() {
       {rideToggle === 'intents' ? (
         hasActiveIntent ? (
           <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200 text-center shadow-sm">
-            <span className="text-3xl mb-2 block">⏳</span>
             <h3 className="font-black text-amber-800 text-lg">Intent Already Active</h3>
             <p className="text-amber-700 text-sm font-medium mt-2 mb-4">You can only have one active travel intent at a time.</p>
             <button onClick={() => setRideToggle('pools')} className="w-full bg-amber-600 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95">View Suggested Pools</button>
@@ -258,9 +258,9 @@ function App() {
                     <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase">Active</span>
                   </div>
                   {activePool || interestedPool ? (
-                    <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in the Pool ( Waiting for Match )</div>
+                    <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in Pool (Waiting for Match)</div>
                   ) : (
-                    <button onClick={() => deleteIntent(intent._id)} className="w-full bg-red-500 text-white py-3 rounded-xl text-sm font-black hover:bg-red-600 transition shadow-sm active:scale-95">Cancel Ride Request</button>
+                    <button onClick={() => { fetchDashboard(); setMyIntents([]) }} className="w-full bg-red-500 text-white py-3 rounded-xl text-sm font-black hover:bg-red-600 transition shadow-sm active:scale-95">Cancel Ride Request</button>
                   )}
                 </div>
               ))
@@ -359,23 +359,10 @@ function App() {
   );
 
   const renderChatScreen = () => {
-    if (!currentUser) return <div className="pt-24 text-center font-bold text-slate-400">Please Login</div>;
-    
-    if (!activePool) {
-      return (
-        <div className="p-4 pb-32 pt-24 flex flex-col items-center text-center bg-slate-50 h-full">
-          <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center text-3xl shadow-inner mb-4">💬</div>
-          <h2 className="text-xl font-black text-slate-900 mb-2">No Active Chats</h2>
-          <p className="text-slate-500 font-bold text-sm px-6">You are not in a confirmed pool yet. Join a ride on your feed to unlock the chat.</p>
-          <button onClick={() => setActiveTab('ride')} className="mt-8 bg-slate-900 text-white px-8 py-4 rounded-xl font-black shadow-md active:scale-95">Go to Ride Feed</button>
-        </div>
-      );
-    }
-
-    const isCoordinator = activePool.coordinator === currentUser._id;
-    const safeAcceptances = activePool.acceptances || [];
-    const safeStops = activePool.uiStops || [];
-    const safeIntents = activePool.intents || [];
+    const isCoordinator = activePool?.coordinator === currentUser?._id;
+    const safeAcceptances = activePool?.acceptances || [];
+    const safeStops = activePool?.uiStops || [];
+    const safeIntents = activePool?.intents || [];
 
     return (
       <div className="flex flex-col h-full pt-16 bg-slate-50 relative pb-[70px]">
@@ -384,16 +371,16 @@ function App() {
             <div className="flex items-center">
               <button onClick={() => setActiveTab('ride')} className="mr-3 text-slate-500 hover:text-slate-900 active:scale-95 transition-all text-xl pb-1">←</button>
               <div>
-                <h2 className="font-black text-slate-900 leading-tight">Confirmed Pool 🚖</h2>
+                <h2 className="font-black text-slate-900 leading-tight">Confirmed Pool</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{activePool.inferredVehicle || 'Vehicle'} • {safeAcceptances.length} Riders</span>
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{activePool?.inferredVehicle || 'Vehicle'} • {safeAcceptances.length} Riders</span>
                   {isCoordinator && <span className="text-[8px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black uppercase">You are Coordinator</span>}
                 </div>
               </div>
             </div>
             <div className="bg-slate-100 p-2 rounded-lg text-center min-w-[70px]">
               <span className="block text-[8px] font-black text-slate-400 uppercase">Est. Fare</span>
-              <span className="font-black text-slate-900 text-sm">₹{activePool.metrics?.estimatedFarePerPerson || '--'}</span>
+              <span className="font-black text-slate-900 text-sm">₹{activePool?.metrics?.estimatedFarePerPerson || '--'}</span>
             </div>
           </div>
 
@@ -426,11 +413,10 @@ function App() {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
           <div className="text-center"><span className="bg-slate-200 text-slate-500 text-[9px] font-black uppercase px-3 py-1 rounded-full">Secure Live Chat</span></div>
-          
           <div className="flex flex-col gap-1 items-start">
             <span className="text-[10px] font-bold text-slate-400 ml-2">System (Automated)</span>
             <div className="bg-emerald-100 border border-emerald-200 text-emerald-900 p-3 rounded-2xl rounded-tl-sm text-sm font-medium max-w-[85%] shadow-sm">
-              You are locked into this ride. The Coordinator must finalize the exact fare with the driver. Use this chat to locate each other!
+              You are locked into this ride. Coordinate pickups here!
             </div>
           </div>
 
@@ -464,13 +450,44 @@ function App() {
     );
   };
 
-  const renderProfileScreen = () => {
-    // 1. Initial State: Show Sandbox and Google Auth
-    if (!currentUser) return (
-      <div className="p-4 pb-24 pt-16 flex flex-col items-center text-center font-sans min-h-screen bg-slate-50">
+  const renderProfileScreen = () => (
+    <div className="p-4 pb-24 pt-20 animate-fade-in">
+      <h2 className="text-2xl font-black text-slate-900 mb-6">Profile</h2>
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl p-6 mb-6">
+        <div className="flex items-center gap-5 pb-6 border-b border-slate-50">
+          <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-inner">
+            {currentUser?.name?.charAt(0) || 'U'}
+          </div>
+          <div>
+            <h3 className="font-black text-slate-900 text-xl leading-tight">{currentUser?.name}</h3>
+            <p className="text-slate-500 text-xs font-bold mt-1">{currentUser?.email}</p>
+            <span className="inline-block bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-1 rounded-md mt-2 uppercase tracking-widest">{currentUser?.rollNo || 'TEST_ACCOUNT'}</span>
+          </div>
+        </div>
+        <div className="pt-6 space-y-4">
+          <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mobile</span>
+            <span className="text-sm font-black text-slate-900">{currentUser?.mobile}</span>
+          </div>
+          <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gender</span>
+            <span className="text-sm font-black text-slate-900 capitalize">{currentUser?.gender}</span>
+          </div>
+        </div>
+      </div>
+      <button onClick={handleDevLogout} className="w-full bg-red-50 text-red-600 border border-red-100 font-bold py-4 rounded-xl shadow-sm hover:bg-red-100 active:scale-95 transition-all">Sign Out</button>
+    </div>
+  );
+
+  if (isCheckingAuth) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-black text-slate-400">Loading...</div>;
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col items-center p-4 pt-16">
+        <Toaster position="top-center" />
         <div className="w-20 h-20 rounded-3xl bg-slate-900 flex items-center justify-center font-black text-white text-4xl mb-6 shadow-2xl mt-4 animate-fade-in">KGP</div>
-        <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Transit</h1>
-        <p className="text-sm font-bold text-slate-500 mb-10">Smart Matchmaking for IIT KGP</p>
+        <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Pooling</h1>
+        <p className="text-sm font-bold text-slate-500 mb-10">Smart Pooling for IIT KGP</p>
 
         <div className="w-full max-w-sm bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl mb-8">
           <h3 className="text-xs font-black text-slate-400 tracking-widest uppercase mb-4">Student Login</h3>
@@ -485,94 +502,73 @@ function App() {
         </div>
 
         <div className="w-full max-w-sm bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100 border-dashed">
-          <h3 className="text-xs font-black text-indigo-400 tracking-widest uppercase mb-4">Recruiter Sandbox</h3>
+          <h3 className="text-xs font-black text-indigo-400 tracking-widest uppercase mb-4">Test users</h3>
           <div className="space-y-2">
-            <button onClick={() => handleDevLogin('Avinash', 'avinash@kgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-sm">Test as Avinash (M)</button>
-            <button onClick={() => handleDevLogin('Rahul', 'rahul@kgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Rahul (M)</button>
-            <button onClick={() => handleDevLogin('Priya', 'priya@kgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Priya (F)</button>
+           <button onClick={() => handleDevLogin('Avinash', 'avinash@kgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-sm">Test as Avinash </button>
+            <button onClick={() => handleDevLogin('Rahul', 'rahul@kgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Rahul</button>
+            <button onClick={() => handleDevLogin('Priya', 'priya@kgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Priya</button>
           </div>
         </div>
       </div>
     );
+  }
 
-    // 2. Onboarding State: Force setup if details are missing
-    const isProfileComplete = currentUser.mobile && currentUser.gender && currentUser.rollNo;
-    
-    if (!isProfileComplete) {
-      const handleCompleteProfile = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const updates = {
-          mobile: formData.get('mobile'),
-          gender: formData.get('gender'),
-          rollNo: formData.get('rollNo')
-        };
-        // Connect to your new /api/auth/complete-profile route here if using Google auth
-        setCurrentUser({ ...currentUser, ...updates });
-        toast.success("Profile Setup Complete!");
+  const isProfileComplete = currentUser.mobile && currentUser.gender && currentUser.rollNo;
+  if (!isProfileComplete) {
+    const handleCompleteProfile = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const updates = {
+        userId: currentUser._id,
+        mobile: formData.get('mobile'),
+        gender: formData.get('gender'),
+        rollNo: formData.get('rollNo')
       };
+      
+      const toastId = toast.loading("Saving Profile...");
+      try {
+        const res = await fetch(`${API_URL}/auth/complete-profile`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          setCurrentUser(resData.user || { ...currentUser, ...updates });
+          toast.success("Welcome to KGP-Pooling!", { id: toastId });
+        }
+      } catch (err) { toast.error("Failed to save onboarding details.", { id: toastId }); }
+    };
 
-      return (
-        <div className="p-4 pb-24 pt-20 animate-fade-in">
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6 text-center shadow-sm">
-            <span className="text-3xl block mb-2">🎓</span>
-            <h2 className="text-lg font-black text-amber-900 mb-1">Complete Your Profile</h2>
-            <p className="text-xs font-bold text-amber-700">We need a few more details to match you securely.</p>
-          </div>
-
-          <form onSubmit={handleCompleteProfile} className="space-y-4 bg-white p-6 rounded-3xl shadow-xl border border-slate-100">
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Roll Number</label>
-              <input name="rollNo" required placeholder="e.g. 21CS100XX" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none uppercase" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Mobile Number</label>
-              <input name="mobile" required placeholder="+91" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Gender</label>
-              <select name="gender" required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none">
-                <option value="">Select Gender</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </div>
-            <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black shadow-md mt-4 active:scale-95 transition-all">Save & Continue</button>
-          </form>
-        </div>
-      );
-    }
-
-    // 3. Fully Logged In Profile
     return (
-      <div className="p-4 pb-24 pt-20 animate-fade-in">
-        <h2 className="text-2xl font-black text-slate-900 mb-6">Profile</h2>
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl p-6 mb-6">
-          <div className="flex items-center gap-5 pb-6 border-b border-slate-50">
-            <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-inner">
-              {currentUser?.name?.charAt(0) || 'U'}
-            </div>
-            <div>
-              <h3 className="font-black text-slate-900 text-xl leading-tight">{currentUser?.name}</h3>
-              <p className="text-slate-500 text-xs font-bold mt-1">{currentUser?.email}</p>
-              <span className="inline-block bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-1 rounded-md mt-2 uppercase tracking-widest">{currentUser?.rollNo || 'TEST_ACCOUNT'}</span>
-            </div>
-          </div>
-          <div className="pt-6 space-y-4">
-            <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mobile</span>
-              <span className="text-sm font-black text-slate-900">{currentUser?.mobile}</span>
-            </div>
-            <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gender</span>
-              <span className="text-sm font-black text-slate-900 capitalize">{currentUser?.gender}</span>
-            </div>
-          </div>
+      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col p-4 pt-20 animate-fade-in">
+        <Toaster position="top-center" />
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6 text-center shadow-sm">
+          <h2 className="text-lg font-black text-amber-900 mb-1">Complete Your Profile</h2>
+          <p className="text-xs font-bold text-amber-700">Provide registration details to unlock campus matchmaking.</p>
         </div>
-        <button onClick={handleDevLogout} className="w-full bg-red-50 text-red-600 border border-red-100 font-bold py-4 rounded-xl shadow-sm hover:bg-red-100 active:scale-95 transition-all">Sign Out</button>
+
+        <form onSubmit={handleCompleteProfile} className="space-y-4 bg-white p-6 rounded-3xl shadow-xl border border-slate-100">
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Roll Number</label>
+            <input name="rollNo" required placeholder="e.g. 21CS100XX" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none uppercase" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Mobile Number</label>
+            <input name="mobile" required placeholder="+91" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Gender</label>
+            <select name="gender" required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-900 outline-none">
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+          <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black shadow-md mt-4 active:scale-95 transition-all">Save & Enter App</button>
+        </form>
       </div>
     );
-  };
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col">
@@ -581,12 +577,12 @@ function App() {
       {activeTab !== 'chat' && (
         <header className="absolute top-0 w-full max-w-md flex items-center gap-2 p-4 z-50 bg-slate-50/90 backdrop-blur-md border-b border-slate-200">
           <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center font-black text-white text-sm shadow-md">KGP</div>
-          <h1 className="text-xl font-black tracking-tight text-slate-900">Transit</h1>
+          <h1 className="text-xl font-black tracking-tight text-slate-900">Pooling</h1>
         </header>
       )}
 
       <main className="flex-1 overflow-y-auto w-full h-full relative">
-        {activeTab === 'ride' && (currentUser ? renderRideScreen() : renderProfileScreen())}
+        {activeTab === 'ride' && renderRideScreen()}
         {activeTab === 'chat' && renderChatScreen()}
         {activeTab === 'profile' && renderProfileScreen()}
       </main>

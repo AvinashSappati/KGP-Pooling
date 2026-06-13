@@ -20,16 +20,21 @@ require('./services/passport');
 const app = express();
 const server = http.createServer(app);
 
-// Dev mode : On wifi 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ 
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], 
+  credentials: true 
+}));
+
 app.use(express.json());
 
-// Basic session storage
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev_secret_key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
+  resave: true,              // Force save
+  saveUninitialized: true,   // Force save
+  cookie: { 
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true
+  }
 }));
 
 // routes 

@@ -7,11 +7,9 @@ passport.serializeUser((user, done) => {
 });
 
 passport.deserializeUser(async (id, done) => {
-  // 1. test user
   if (typeof id === 'string' && id.startsWith('user_')) {
-     return done(null, { _id: id, id, name: "Sandbox Tester", email: "test@kgp.ac.in", rollNo: 'ADMIN_TEST', mobile: 'Sandbox', gender: 'male' });
+     return done(null, { _id: id, id, name: id.replace('user_', ''), email: `${id.replace('user_', '')}@kgp.ac.in`, rollNo: 'ADMIN_TEST', mobile: 'Sandbox', gender: 'male' });
   }
-  // 2. finding real Google user in the DB
   try {
     const user = await User.findById(id);
     done(null, user);
@@ -21,17 +19,28 @@ passport.deserializeUser(async (id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: '/auth/google/callback'
+    callbackURL: 'http://localhost:5000/auth/google/callback'
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
-      // Find or create the user in our Database
+      const email = profile.emails[0].value;
+      
+      const DEV_WHITELIST = ['sappatiavinash@gmail.com']; 
+      
+      const isKgpian = email.endsWith('@kgpian.iitkgp.ac.in');
+      const isDev = DEV_WHITELIST.includes(email);
+
+      // Block them if they are neither a student nor you
+      if (!isKgpian && !isDev) {
+        return done(null, false, { message: 'Invalid Domain' });
+      }
+      
       let user = await User.findOne({ googleId: profile.id });
       if (!user) {
         user = await User.create({
           googleId: profile.id,
           name: profile.displayName,
-          email: profile.emails[0].value,
+          email: email,
         });
       }
       done(null, user);

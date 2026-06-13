@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 import RideRequestForm from './components/RideRequestForm';
 
 // Hardcoded for localhost cookie locking
-const API_URL = 'http://localhost:5000';
+const API_URL = 'https://kgp-pooling.onrender.com/';
 const socket = io(API_URL);
 
 const USER_DIRECTORY = {

@@ -51,10 +51,13 @@ app.use(session({
 }));
 
 app.use((req, res, next) => {
-    if (req.session && !req.session.regenerate) {
+    if(!req.session) {
+      req.session = {};
+    }
+    if (!req.session.regenerate) {
         req.session.regenerate = (cb) => cb();
     }
-    if (req.session && !req.session.save) {
+    if (!req.session.save) {
         req.session.save = (cb) => cb();
     }
     next();

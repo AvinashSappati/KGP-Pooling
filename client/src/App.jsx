@@ -111,15 +111,25 @@ function App() {
   const handleCancelIntent = async (intentId) => {
     const toastId = toast.loading("Canceling ride request...");
     try {
-      const res = await fetch(`${API_URL}/api/intents/${intentId}`, {
+      // Note: Make sure the URL matches your exact route in intentRoutes.js
+      // (e.g., if your route is router.delete('/delete', deleteIntent), use '/api/intents/delete')
+      const res = await fetch(`${API_URL}/api/intents/delete`, { 
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        // 🔴 THIS IS THE FIX: Sending the body your controller expects
+        body: JSON.stringify({ 
+          intentId: intentId, 
+          userId: currentUser._id 
+        })
       });
       
       if (res.ok) {
         toast.success("Ride request canceled.", { id: toastId });
-        setMyIntents([]); // Clear it locally
-        setRideToggle('intents'); // Kick them back to the creation screen
-        fetchDashboard(); // Sync with DB
+        setMyIntents([]); 
+        setRideToggle('intents'); 
+        fetchDashboard(); 
       } else {
         toast.error("Failed to cancel on server.", { id: toastId });
       }

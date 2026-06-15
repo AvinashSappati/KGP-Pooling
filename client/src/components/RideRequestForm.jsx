@@ -29,20 +29,22 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
     const finalUserId = currentUser?._id || currentUser?.id;
     if (!finalUserId) return toast.error("Please login.");
 
+    const safeDepartureTime = new Date(formData.targetDepartureTime).toISOString();
+
     setLoading(true);
     try {
-      const response = await fetch(`https://kgp-pooling.onrender.com/api/intents/request-ride`, {
+      const response = await fetch(`${API_URL}/api/intents/request-ride`, {
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           userId: finalUserId, 
           fromNode: formData.originNode, 
           toNode: formData.destinationNode, 
-          departureTime: formData.targetDepartureTime,
+          departureTime: safeDepartureTime, // Using the timezone-corrected date
           flexibilityMinutes: Number(formData.flexibilityMinutes),
           luggageSize: formData.luggageSize,
           vehiclePreference: formData.vehiclePreference,
-          gender: currentUser.gender, // Pulled straight from user profile
+          gender: currentUser.gender,
           genderPreference: formData.genderPreference
         })
       });
@@ -51,7 +53,7 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
       if (response.status === 400) {
         toast.error(data.message);
       } else if (data.poolFound) {
-        toast.success("Pool suggested : please check your suggestions.");
+        toast.success("Pool suggested: please check your suggestions.");
         refreshData(); 
       } else {
         toast.success(data.message);

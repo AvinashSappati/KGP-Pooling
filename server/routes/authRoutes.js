@@ -19,7 +19,25 @@ router.get('/google/callback',
 router.post('/complete-profile', async (req, res) => {
   try {
     const { userId, mobile, gender, rollNo } = req.body;
-    const updatedUser = await User.findByIdAndUpdate(userId, { mobile, gender, rollNo }, { new: true });
+    
+    const existingUser = await User.findOne({
+      _id: { $ne: userId }, 
+      $or: [
+        { rollNo: rollNo.toUpperCase() }, 
+        { mobile: mobile }
+      ]
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: "Roll Number or Mobile already registered to another account!" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, 
+      { mobile, gender, rollNo: rollNo.toUpperCase() }, 
+      { new: true }
+    );
+    
     res.status(200).json({ message: "Profile updated!", user: updatedUser });
   } catch (err) {
     res.status(500).json({ error: "Failed to update profile." });

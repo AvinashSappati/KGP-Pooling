@@ -4,7 +4,8 @@ import io from 'socket.io-client';
 import RideRequestForm from './components/RideRequestForm';
 
 const API_URL = 'https://kgp-pooling.onrender.com';
-const socket = io(API_URL);
+// Added withCredentials so mobile browsers don't block the live chat
+const socket = io(API_URL, { withCredentials: true });
 
 const USER_DIRECTORY = {
   'user_avinash': { name: 'Avinash', phone: '+91 91234 56780' },
@@ -116,14 +117,11 @@ function App() {
   const handleCancelIntent = async (intentId) => {
     const toastId = toast.loading("Canceling ride request...");
     try {
-      // Note: Make sure the URL matches your exact route in intentRoutes.js
-      // (e.g., if your route is router.delete('/delete', deleteIntent), use '/api/intents/delete')
       const res = await fetch(`${API_URL}/api/intents/delete`, { 
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
         },
-        // 🔴 THIS IS THE FIX: Sending the body your controller expects
         body: JSON.stringify({ 
           intentId: intentId, 
           userId: currentUser._id 
@@ -528,24 +526,29 @@ function App() {
         <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Pooling</h1>
         <p className="text-sm font-bold text-slate-500 mb-10">Smart Pooling for IIT KGP</p>
 
-        <div className="w-full max-w-sm bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl mb-8">
-          <h3 className="text-xs font-black text-slate-400 tracking-widest uppercase mb-4">Student Login</h3>
+        <div className="w-[90%] max-w-sm bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-xl mb-8 mx-auto">
+          <h3 className="text-[10px] sm:text-xs font-black text-slate-400 tracking-widest uppercase mb-4 text-center">Student Login</h3>
+          
           <button 
             onClick={() => window.location.href = `${API_URL}/auth/google`} 
-            className="w-full bg-slate-50 text-slate-900 py-4 rounded-xl font-black border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-3 shadow-sm"
+            className="w-full bg-slate-50 text-slate-900 py-3.5 sm:py-4 rounded-xl font-black border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-2 sm:gap-3 shadow-sm text-sm sm:text-base"
           >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4 sm:w-5 sm:h-5" />
             Continue with Google
           </button>
-          <p className="text-[10px] font-bold text-slate-400 mt-4">Requires @kgpian.iitkgp.ac.in email</p>
+          
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-500">Requires @kgpian.iitkgp.ac.in</p>
+          </div>
         </div>
 
-        <div className="w-full max-w-sm bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100 border-dashed">
-          <h3 className="text-xs font-black text-indigo-400 tracking-widest uppercase mb-4">Test users</h3>
-          <div className="space-y-2">
-           <button onClick={() => handleDevLogin('Avinash', 'avinash@kgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-sm">Test as Avinash </button>
-            <button onClick={() => handleDevLogin('Rahul', 'rahul@kgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Rahul</button>
-            <button onClick={() => handleDevLogin('Priya', 'priya@kgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-sm">Test as Priya</button>
+        <div className="w-[90%] max-w-sm bg-indigo-50/50 p-5 sm:p-6 rounded-3xl border border-indigo-100 border-dashed mx-auto">
+          <h3 className="text-[10px] sm:text-xs font-black text-indigo-400 tracking-widest uppercase mb-4 text-center">Test users</h3>
+          <div className="grid grid-cols-1 gap-2">
+           <button onClick={() => handleDevLogin('Avinash', 'avinash@kgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-xs sm:text-sm">Test as Avinash </button>
+            <button onClick={() => handleDevLogin('Rahul', 'rahul@kgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test as Rahul</button>
+            <button onClick={() => handleDevLogin('Priya', 'priya@kgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test as Priya</button>
           </div>
         </div>
       </div>
@@ -570,17 +573,23 @@ function App() {
       const toastId = toast.loading("Saving Profile...");
       try {
         const res = await fetch(`${API_URL}/auth/complete-profile`, {
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include', 
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(updates)
         });
+        
+        const resData = await res.json(); 
+
         if (res.ok) {
-          const resData = await res.json();
           setCurrentUser(resData.user || { ...currentUser, ...updates });
-          toast.success("Welcome to KGP-Pooling!", { id: toastId });
+          toast.success("Welcome to Pooling!", { id: toastId });
+        } else {
+          toast.error(resData.error || "Failed to save details.", { id: toastId, duration: 4000 });
         }
-      } catch (err) { toast.error("Failed to save onboarding details.", { id: toastId }); }
+      } catch (err) { 
+        toast.error("Network error.", { id: toastId }); 
+      }
+    }; // 🔴 THIS CLOSING BRACKET WAS MISSING IN YOUR CODE!
 
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col p-4 pt-20 animate-fade-in">

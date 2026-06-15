@@ -24,16 +24,10 @@ passport.use(new GoogleStrategy({
   async (accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails[0].value;
-      
-      const DEV_WHITELIST = ['sappatiavinash@gmail.com']; 
-      
-      const isKgpian = email.endsWith('@kgpian.iitkgp.ac.in');
-      const isDev = DEV_WHITELIST.includes(email);
-
-      // Block them if they are neither a student nor you
-      if (!isKgpian && !isDev) {
-        return done(null, false, { message: 'Invalid Domain' });
-      }
+            
+      if (!email.endsWith('@kgpian.iitkgp.ac.in')) {
+      return done(null, false, { message: 'domain_restricted' }); 
+    }
       
       let user = await User.findOne({ googleId: profile.id });
       if (!user) {

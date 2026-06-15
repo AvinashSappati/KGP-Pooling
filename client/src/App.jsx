@@ -118,7 +118,7 @@ function App() {
     const toastId = toast.loading("Canceling ride request...");
     try {
       const res = await fetch(`${API_URL}/api/intents/delete`, { 
-        method: 'DELETE',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },

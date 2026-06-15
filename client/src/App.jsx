@@ -3,9 +3,9 @@ import toast, { Toaster } from 'react-hot-toast';
 import io from 'socket.io-client';
 import RideRequestForm from './components/RideRequestForm';
 
-const API_URL = 'https://kgp-pooling.onrender.com';
-// Added withCredentials so mobile browsers don't block the live chat
-const socket = io(API_URL, { withCredentials: true });
+const API_URL = '';
+const SOCKET_URL = 'https://kgp-pooling.onrender.com';
+const socket = io(SOCKET_URL, { withCredentials: true });
 
 const USER_DIRECTORY = {
   'user_avinash': { name: 'Avinash', phone: '+91 91234 56780' },

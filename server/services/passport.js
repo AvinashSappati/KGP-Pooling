@@ -19,12 +19,13 @@ passport.deserializeUser(async (id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `https://kgp-pooling.onrender.com/auth/google/callback`
+    callbackURL: `https://kgp-pooling.vercel.app/auth/google/callback`,
+    proxy:true
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails[0].value;
-            
+
       if (!email.endsWith('@kgpian.iitkgp.ac.in')) {
       return done(null, false, { message: 'domain_restricted' }); 
     }

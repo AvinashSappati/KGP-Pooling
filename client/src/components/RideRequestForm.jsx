@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+const API_URL = '';
+
 const HALL_NODES = ["RP Hall", "BC Roy Hall", "RK Hall", "Gokhale Hall", "MS Hall", "LLR Hall", "MMM Hall", "LBS Hall", "Patel Hall", "Nehru Hall", "Azad Hall", "BRH", "SNVH Hall", "MT Hall", "VGH", "VSRC 2", "VSRC", "SBP 1&2", "ABV Hall", "SNIG Hall", "RLB Hall", "VS Hall", "HJB & JCB Hall"];
 const OUTSTATION_NODES = ["Main Gate", "KGP Railway Station", "Hijli Railway Station", "Sealdah Railway Station", "Howrah Railway Station", "Kolkata Airport (CCU)"];
 
@@ -40,7 +42,7 @@ const RideRequestForm = ({ currentUser, refreshData }) => {
           userId: finalUserId, 
           fromNode: formData.originNode, 
           toNode: formData.destinationNode, 
-          departureTime: safeDepartureTime, // Using the timezone-corrected date
+          departureTime: safeDepartureTime, 
           flexibilityMinutes: Number(formData.flexibilityMinutes),
           luggageSize: formData.luggageSize,
           vehiclePreference: formData.vehiclePreference,

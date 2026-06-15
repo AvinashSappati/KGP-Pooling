@@ -70,7 +70,9 @@ function App() {
   const handleDevLogin = async (name, email, mobile, gender) => {
     try {
       const res = await fetch(`${API_URL}/auth/dev_login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', 
         body: JSON.stringify({ name, email, mobile, gender })
       });
       if (res.ok) {
@@ -82,7 +84,10 @@ function App() {
   };
 
   const handleDevLogout = async () => {
-    await fetch(`${API_URL}/auth/logout`, { method: 'POST' });
+    await fetch(`${API_URL}/auth/logout`, { 
+      method: 'POST',
+      credentials: 'include' 
+    });
     setCurrentUser(null);
     setMyIntents([]);
     setMyPools([]);
@@ -565,7 +570,9 @@ function App() {
       const toastId = toast.loading("Saving Profile...");
       try {
         const res = await fetch(`${API_URL}/auth/complete-profile`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', 
           body: JSON.stringify(updates)
         });
         if (res.ok) {
@@ -574,7 +581,6 @@ function App() {
           toast.success("Welcome to KGP-Pooling!", { id: toastId });
         }
       } catch (err) { toast.error("Failed to save onboarding details.", { id: toastId }); }
-    };
 
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col p-4 pt-20 animate-fade-in">

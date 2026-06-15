@@ -6,11 +6,12 @@ const User = require('../models/User');
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 router.get('/google/callback', 
-  passport.authenticate('google', { failureRedirect: 'https://kgp-pooling.vercel.app' }), 
+  passport.authenticate('google', { 
+    failureRedirect: `${process.env.FRONTEND_URL}?error=domain_restricted` 
+  }), 
   (req, res) => {
-    // 🔴 THE FIX: Force the session to save to the database before redirecting
     req.session.save(() => {
-      res.redirect('https://kgp-pooling.vercel.app');
+      res.redirect(process.env.FRONTEND_URL);
     });
   }
 );
@@ -47,10 +48,13 @@ router.get('/current_user', (req, res) => {
   }
 });
 
-router.post('/logout', (req, res) => {
-  if (req.logout) req.logout((err) => {});
-  req.session.destroy();
-  res.status(200).json({ message: "Logged out" });
+router.post('/logout', (req, res, next) => {
+  req.logout((err) => {
+    if (err) { return next(err); }
+    req.session.destroy(() => {
+      res.status(200).json({ message: "Logged out" });
+    });
+  });
 });
 
 module.exports = router;

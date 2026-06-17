@@ -8,10 +8,9 @@ const SOCKET_URL = 'https://kgp-pooling.onrender.com';
 const socket = io(SOCKET_URL, { withCredentials: true });
 
 const USER_DIRECTORY = {
-  'user_avinash': { name: 'Avinash', phone: '+91 91234 56780' },
-  'user_rahul': { name: 'Rahul', phone: '+91 99887 76655' },
-  'user_priya': { name: 'Priya', phone: '+91 98765 43210' },
-  'user_aman': { name: 'Aman', phone: '+91 91111 22222' }
+  'test_user1': { name: 'testuser1', phone: '+91 91234 56780' },
+  'test_user2': { name: 'testuser2', phone: '+91 99887 76655' },
+  'test_user3': { name: 'testuser3', phone: '+91 98765 43210' },
 };
 
 const LiveTimer = ({ startTime }) => {
@@ -51,7 +50,7 @@ function App() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('error') === 'domain_restricted') {
-      toast.error("Access Denied: Only @kgpian.iitkgp.ac.in accounts allowed!", { duration: 5000 });
+      toast.error("Only @kgpian.iitkgp.ac.in accounts allowed !", { duration: 5000 });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -79,9 +78,9 @@ function App() {
       if (res.ok) {
         const user = await res.json();
         setCurrentUser(user);
-        toast.success(`Sandbox Mode: Connected as ${name}`);
+        toast.success(`Connected as ${name}`);
       }
-    } catch (err) { toast.error("Sandbox authentication down."); }
+    } catch (err) { toast.error(" Authentication down."); }
   };
 
   const handleDevLogout = async () => {
@@ -106,7 +105,7 @@ function App() {
         setMyIntents(data.intents || []);
         setMyPools(data.pools || []);
       }
-    } catch (err) { toast.error("Failed to sync network."); } 
+    } catch (err) { toast.error("Failed to Sync network."); } 
     finally { setIsLoading(false); }
   };
 
@@ -290,7 +289,7 @@ function App() {
                     <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase">Active</span>
                   </div>
                   {activePool || interestedPool ? (
-                    <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in Pool (Waiting for Match)</div>
+                    <div className="w-full bg-slate-800 text-slate-400 py-3 rounded-xl text-center text-sm font-black shadow-sm opacity-50 cursor-not-allowed">Locked in the Pool</div>
                   ) : (
                     <button 
                         onClick={() => handleCancelIntent(intent._id)} 
@@ -326,7 +325,6 @@ function App() {
                   <div key={pool._id} className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-xl relative transition-all">
                     <div className="flex justify-between items-start mb-4 border-b border-slate-50 pb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl">🚖</span>
                         <div>
                           <h3 className="font-black text-slate-900 text-md">Suggested Route</h3>
                         </div>
@@ -524,7 +522,7 @@ function App() {
         <Toaster position="top-center" />
         <div className="w-20 h-20 rounded-3xl bg-slate-900 flex items-center justify-center font-black text-white text-4xl mb-6 shadow-2xl mt-4 animate-fade-in">KGP</div>
         <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Pooling</h1>
-        <p className="text-sm font-bold text-slate-500 mb-10">Smart Pooling for IIT KGP</p>
+        <p className="text-sm font-bold text-slate-500 mb-10">Smart Pooling for KGPians </p>
 
         <div className="w-[90%] max-w-sm bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-xl mb-8 mx-auto">
           <h3 className="text-[10px] sm:text-xs font-black text-slate-400 tracking-widest uppercase mb-4 text-center">Student Login</h3>
@@ -546,9 +544,9 @@ function App() {
         <div className="w-[90%] max-w-sm bg-indigo-50/50 p-5 sm:p-6 rounded-3xl border border-indigo-100 border-dashed mx-auto">
           <h3 className="text-[10px] sm:text-xs font-black text-indigo-400 tracking-widest uppercase mb-4 text-center">Test users</h3>
           <div className="grid grid-cols-1 gap-2">
-           <button onClick={() => handleDevLogin('Avinash', 'avinash@kgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-xs sm:text-sm">Test as Avinash </button>
-            <button onClick={() => handleDevLogin('Rahul', 'rahul@kgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test as Rahul</button>
-            <button onClick={() => handleDevLogin('Priya', 'priya@kgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test as Priya</button>
+           <button onClick={() => handleDevLogin('testuser1', 'test1@kgpian.iitkgp.ac.in', '+91 91234 56780', 'male')} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-xs sm:text-sm">Test User 1 </button>
+            <button onClick={() => handleDevLogin('testuser2', 'test2@kgpian.iitkgp.ac.in', '+91 99887 76655', 'male')} className="w-full bg-indigo-100 text-indigo-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test User 2 </button>
+            <button onClick={() => handleDevLogin('testuser3', 'test3@kgpian.iitkgp.ac.in', '+91 98765 43210', 'female')} className="w-full bg-pink-100 text-pink-800 py-3 rounded-xl font-bold active:scale-95 transition-all text-xs sm:text-sm">Test User 3</button>
           </div>
         </div>
       </div>
@@ -596,7 +594,7 @@ function App() {
         <Toaster position="top-center" />
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6 text-center shadow-sm">
           <h2 className="text-lg font-black text-amber-900 mb-1">Complete Your Profile</h2>
-          <p className="text-xs font-bold text-amber-700">Provide registration details to unlock campus matchmaking.</p>
+          <p className="text-xs font-bold text-amber-700">Please provide registration details to enter app .</p>
         </div>
 
         <form onSubmit={handleCompleteProfile} className="space-y-4 bg-white p-6 rounded-3xl shadow-xl border border-slate-100">

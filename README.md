@@ -75,7 +75,7 @@ The engine processes intents differently based on the travel distance to optimiz
 
 | Dashboard & Intents | Suggested Pools | Locked Pool Chat | Campus Map |
 | :---: | :---: | :---: | :---: |
-| ![Dashboard](assets/dashboard.jpeg) | ![Suggestions](assets/suggestions.jpeg) | ![Chat](assets/chat.jpeg) | ![Map](assets/campusmap.png) |
+| ![Dashboard](assets/dashboard.png) | ![Suggestions](assets/suggestions.jpeg) | ![Chat](assets/chat.jpeg) | ![Map](assets/campusmap.png) |
 
 * **Single Intent:** A user can only hold one active intent at a time.
 * **Locked Chat UI:** Users cannot access the chat section unless they have successfully accepted and confirmed a pool.

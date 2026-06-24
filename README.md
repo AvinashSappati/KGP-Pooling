@@ -13,7 +13,7 @@ During holidays and end-sems, thousands of IIT Kharagpur students travel to tran
 * **Coordination Friction:** Finding users with overlapping departure flexibility and matching luggage constraints is a logistical nightmare.
 * **Security & Trust:** Coordinating with unverified strangers outside the institute network.
 
-## he Proposed Solution
+## The Proposed Solution
 A "No-Search" automated matchmaker. Users do not manually search or message strangers. They simply post their **Direction**, **Destination**, **Time Flexibility**, and **Luggage Level**. The system processes these constraints and outputs ready-to-accept **Suggested Pools**. Once a pool locks, a secure, real-time chat is instantly generated for the occupants.
 
 ---

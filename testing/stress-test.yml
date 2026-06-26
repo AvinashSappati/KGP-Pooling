@@ -1,0 +1,26 @@
+# testing/stress-test.yml
+config:
+  target: "http://localhost:5000"
+  processor: "./test-helpers.js" # Hooks up your randomizer
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      rampTo: 50
+      name: "End-Sem Campus-Wide Traffic Spike"
+
+scenarios:
+  - name: "Randomized Student Intent"
+    flow:
+      - function: "generateRandomStudent" # Runs the JS before sending
+      - post:
+          url: "/api/intents/request-ride" # Hits your backend route
+          json:
+            userId: "{{ userId }}"
+            fromNode: "{{ fromNode }}"
+            toNode: "{{ toNode }}"
+            departureTime: "2026-12-20T17:00:00Z"
+            flexibilityMinutes: "{{ flexibilityMinutes }}"
+            luggageSize: "{{ luggageSize }}"
+            vehiclePreference: "ANY"
+            gender: "male"
+            genderPreference: "none"

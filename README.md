@@ -1,4 +1,5 @@
-#  KGP-Pooling 
+#  KGP-Pooling
+[Live here](https://kgp-pooling.vercel.app/)
 
 > **An automated, algorithm-driven transit matchmaking engine exclusively for IIT Kharagpur.**
 
@@ -12,7 +13,7 @@ During holidays and end-sems, thousands of IIT Kharagpur students travel to tran
 * **Coordination Friction:** Finding users with overlapping departure flexibility and matching luggage constraints is a logistical nightmare.
 * **Security & Trust:** Coordinating with unverified strangers outside the institute network.
 
-## he Proposed Solution
+## The Proposed Solution
 A "No-Search" automated matchmaker. Users do not manually search or message strangers. They simply post their **Direction**, **Destination**, **Time Flexibility**, and **Luggage Level**. The system processes these constraints and outputs ready-to-accept **Suggested Pools**. Once a pool locks, a secure, real-time chat is instantly generated for the occupants.
 
 ---
@@ -75,7 +76,7 @@ The engine processes intents differently based on the travel distance to optimiz
 
 | Dashboard & Intents | Suggested Pools | Locked Pool Chat | Campus Map |
 | :---: | :---: | :---: | :---: |
-| ![Dashboard](assets/dashboard.jpeg) | ![Suggestions](assets/suggestions.jpeg) | ![Chat](assets/chat.jpeg) | ![Map](assets/campusmap.png) |
+| ![Dashboard](assets/dashboard.png) | ![Suggestions](assets/suggestions.jpeg) | ![Chat](assets/chat.jpeg) | ![Map](assets/campusmap.png) |
 
 * **Single Intent:** A user can only hold one active intent at a time.
 * **Locked Chat UI:** Users cannot access the chat section unless they have successfully accepted and confirmed a pool.

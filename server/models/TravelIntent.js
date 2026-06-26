@@ -14,7 +14,10 @@ const intentSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'pooled', 'expired', 'cancelled'], default: 'active' }
 }, { timestamps: true });
 
-// Auto-deletes 24 hours AFTER the trip actually departs
-intentSchema.index({ departureTime: 1 }, { expireAfterSeconds: 86400 });
+// 🔥 UPGRADE 2: TTL Index - Auto-deletes 2 hours (7200s) AFTER the trip departs
+intentSchema.index({ departureTime: 1 }, { expireAfterSeconds: 7200 });
+
+// 🔥 UPGRADE 1: B-Tree Compound Indexing for O(log N) Global Phase 1 Filtering
+intentSchema.index({ toNode: 1, fromNode: 1, departureTime: 1 });
 
 module.exports = mongoose.model('TravelIntent', intentSchema);

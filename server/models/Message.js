@@ -8,6 +8,7 @@ const messageSchema = new mongoose.Schema({
   rideDepartureTime: { type: Date, required: true }
 }, { timestamps: true });
 
+// 🔥 UPGRADE 2: TTL Index - Auto-deletes messages 24 hours (86400s) after the ride departs
 messageSchema.index({ rideDepartureTime: 1 }, { expireAfterSeconds: 86400 });
 
 module.exports = mongoose.model('Message', messageSchema);

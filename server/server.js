@@ -10,7 +10,6 @@ const os = require('os');
 
 // Route Imports
 const authRoutes = require('./routes/authRoutes');
-const rideRoutes = require('./routes/rideRoutes'); 
 const messageRoutes = require('./routes/messageRoutes'); 
 const intentRoutes = require('./routes/intentRoutes');
 const poolRoutes = require('./routes/poolRoutes'); 
@@ -68,7 +67,6 @@ app.use(passport.session());
 
 // routes 
 app.use('/auth', authRoutes);
-app.use('/api/rides', rideRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/intents', intentRoutes);
 app.use('/api/pools', poolRoutes); 

@@ -1,24 +1,20 @@
-// testing/test-helpers.js
 const fromNodes = ["MS Hall", "LBS Hall", "MMM Hall", "SNIG Hall", "RK Hall", "RP Hall", "MT Hall", "Azad Hall"];
 const toNodes = ["KGP Railway Station", "Hijli Railway Station", "Kolkata Airport (CCU)", "Howrah Railway Station"];
 const luggageSizes = ["none", "backpack", "medium", "large"];
 
-function generateRandomStudent(requestParams, context, ee, next) {
-  // Generate a random mock user ID
-  context.vars.userId = `test_kgpian_${Math.floor(Math.random() * 1000000)}`;
+// 🔥 FIXED: Updated parameters to match Artillery's Flow context
+function generateRandomStudent(userContext, events, done) {
+  // We use userContext.vars instead of context.vars
+  userContext.vars.userId = `test_kgpian_${Math.floor(Math.random() * 1000000)}`;
+  userContext.vars.fromNode = fromNodes[Math.floor(Math.random() * fromNodes.length)];
+  userContext.vars.toNode = toNodes[Math.floor(Math.random() * toNodes.length)];
+  userContext.vars.luggageSize = luggageSizes[Math.floor(Math.random() * luggageSizes.length)];
   
-  // Pick random campus locations
-  context.vars.fromNode = fromNodes[Math.floor(Math.random() * fromNodes.length)];
-  context.vars.toNode = toNodes[Math.floor(Math.random() * toNodes.length)];
-  
-  // Randomize luggage
-  context.vars.luggageSize = luggageSizes[Math.floor(Math.random() * luggageSizes.length)];
-  
-  // Randomize flexibility (15, 30, 45, or 60 mins)
   const flexes = [15, 30, 45, 60];
-  context.vars.flexibilityMinutes = flexes[Math.floor(Math.random() * flexes.length)];
+  userContext.vars.flexibilityMinutes = flexes[Math.floor(Math.random() * flexes.length)];
   
-  return next();
+  // 🔥 FIXED: Return done() to let Artillery proceed to the API call
+  return done();
 }
 
 module.exports = { generateRandomStudent };

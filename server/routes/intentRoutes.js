@@ -10,7 +10,21 @@ const {
 } = require('../controllers/intentController');
 
 // Core api routes 
+// THE TESTING BACKDOOR MIDDLEWARE
+const requireAuth = (req, res, next) => {
+  // 1. THE BYPASS: If we are running Artillery, skip Google OAuth entirely
+  if (process.env.NODE_ENV === 'testing') {
+    return next(); 
+  }
+  
+  // 2. PRODUCTION: Ensure real users are actually logged in via Passport.js
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    return next();
+  }
 
+  // 3. THE BOUNCER: Kick them out if they aren't logged in and we aren't testing
+  return res.status(401).json({ error: "Unauthorized. Please log in." });
+};
 // Broadcasting a new Travel Intent & trigger Matchmaker
 router.post('/request-ride', processMatchmaking);
 

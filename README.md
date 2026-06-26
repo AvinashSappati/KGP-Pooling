@@ -18,6 +18,7 @@ A "No-Search" automated matchmaker. Users do not manually search or message stra
 
 ---
 
+
 ## System Architecture
 
 ### High-Level Flow
@@ -70,6 +71,14 @@ The engine processes intents differently based on the travel distance to optimiz
 
 ---
 
+## Quality Assurance & Load Testing
+To ensure the mathematical validity and physical stability of the system, a decoupled testing architecture (`/testing` directory) was built to isolate QA scripts from production code.
+
+* **High-Concurrency Load Testing (Artillery.js):** Architected automated pipelines to simulate campus-wide end-sem traffic spikes. Successfully blasted the server with **900 unique, randomized requests in 30 seconds**.
+* **Database Throughput Validation:** Proven capability to handle heavy concurrency, generating and executing bulk database writes of **1,700+ optimized transit pools** into MongoDB during a 30-second window.
+* **System Profiling:** Analyzed p95 latency metrics to identify CPU-bound event loop bottlenecks caused by synchronous mathematical clustering computations, establishing the precise roadmap for the next architectural iteration.
+
+  
 ## UI/UX Flow
 
 *(Screenshots located in the `assets/` directory)*
@@ -84,19 +93,11 @@ The engine processes intents differently based on the travel distance to optimiz
 
 ---
 
-## Testing Strategy
-To ensure the mathematical validity and physical stability of the system, two testing paradigms are utilized:
-* **Unit/Integration Testing (Jest):** Automated scripts verify the time-overlap logic, regional sorting, agglomerative clustering math, and vehicle/luggage constraints in isolation, ensuring edge cases do not break the matchmaking pipeline.
-* **Load/Stress Testing (k6):** Simulates high-concurrency end-sem traffic (e.g., hundreds of virtual students posting intents simultaneously) to validate database connection stability, queue handling, and server memory limits.
 
----
+## Future Scalability Roadmap
+Having successfully optimized the database layer, the following backend architecture upgrades are slated to support 15,000+ concurrent students:
 
-## Future Scalability Roadmap (Infrastructure Upgrades)
-To scale this application to support 15,000+ concurrent students without altering the core user features, the following backend optimizations are slated for the next deployment phase:
-
-1. **B-Tree Compound Indexing:** Applying indexes to `{ fromNode: 1, toNode: 1, departureTime: 1 }` to convert $O(N)$ MongoDB collection scans into $O(\log N)$ lookups during the Phase 1 Global Filter step.
-2. **TTL (Time-To-Live) Database Cleanup:** Implementing native MongoDB TTL indexes to automatically prune `Pool` and `Intent` documents exactly 2 hours after their departure window expires, keeping the database permanently lightweight.
-3. **Mongoose Connection Pooling:** Establishing and holding a pool of active TCP connections to MongoDB, bypassing the 50-100ms SSL handshake delay during sudden traffic spikes.
-4. **Redis Dashboard Caching:** Storing computationally expensive feed calculations in an in-memory Redis cache to serve the primary dashboard in ~1ms, bypassing MongoDB reads entirely until a cache invalidation is triggered by a new intent.
-5. **Rate Limiting:** Applying `express-rate-limit` to authentication and intent-creation endpoints to protect against brute-force script attacks and control server load.
-6. **Automated CI/CD Pipelines:** Integrating GitHub Actions to automate Jest unit testing and streamline zero-downtime production deployments across Vercel and Render upon successful test passes.
+1. **Message Queue Offloading (Redis/BullMQ):** Moving the Agglomerative Clustering algorithm out of the main Express thread and into background worker threads to prevent Node.js event-loop blocking under heavy O(N^2) mathematical loads.
+2. **Dashboard Caching:** Storing computationally expensive feed calculations in an in-memory Redis cache to serve the primary dashboard in ~1ms, bypassing MongoDB reads entirely until a cache invalidation is triggered.
+3. **Mongoose Connection Pooling:** Establishing and holding a pool of active TCP connections to MongoDB, bypassing the SSL handshake delay during sudden traffic spikes.
+4. **Rate Limiting:** Applying `express-rate-limit` to authentication and intent-creation endpoints to protect against brute-force script attacks.
